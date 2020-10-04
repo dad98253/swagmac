@@ -100,3 +100,11 @@ vc60.*
 c_fct.h
 *.lst
 .settings/
+
+*.txt
+*.csv
+*.xls
+*.ods
+*.xml
+
+
