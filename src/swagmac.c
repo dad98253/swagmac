@@ -99,18 +99,15 @@ int main(int argc, char* argv[])
 	size_t len = LINELEN;
 	ssize_t read;
 	size_t size = LINELENp5;
-//	char * redir;
-//	char redir1[] = ">";
-//	char redir2[] = ">>";
-	int first = 1;
-	int second = 1;
-	int third = 1;
-	int fourth = 1;
-	int fifth = 1;
-	int sixth = 1;
+	int first = 0;
+	int second = 0;
+	int third = 0;
+	int fourth = 0;
+	int fifth = 0;
+	int sixth = 0;
 	char *filename;
 	char *outfilename;
-//	char *switchfile;
+	char *switchfile;
 	char tname[LINELEN];
 	char tven[LINELEN];
 	char tip[LINELEN];
@@ -135,6 +132,25 @@ int main(int argc, char* argv[])
 	if (argc > 1) {
 			if ((strlen(argv[1]) > 0)) confFile = argv[1];
 		}
+	if (argc > 2) {
+		if ((strcmp(argv[2], "all") == 0) | (strcmp(argv[2], "first") == 0)) first = 1;
+		if ((strcmp(argv[2], "all") == 0) | (strcmp(argv[2], "second") == 0)) second = 1;
+		if ((strcmp(argv[2], "all") == 0) | (strcmp(argv[2], "third") == 0)) third = 1;
+		if ((strcmp(argv[2], "all") == 0) | (strcmp(argv[2], "fourth") == 0)) fourth = 1;
+		if ((strcmp(argv[2], "all") == 0) | (strcmp(argv[2], "fifth") == 0)) fifth = 1;
+		if ((strcmp(argv[2], "all") == 0) | (strcmp(argv[2], "sixth") == 0)) sixth = 1;
+	}
+	else {
+		first = 1;
+		second = 1;
+		third = 1;
+		fourth = 1;
+		fifth = 1;
+		sixth = 1;
+	}
+	switchfile = "24portMACs.txt";
+	if (argc > 3)  switchfile = argv[3] ;
+
 
 
 	line = (char*)malloc(size);
@@ -667,7 +683,7 @@ int main(int argc, char* argv[])
 
 		    case 6:
 				if (sixth) {
-//					filename = switchfile;
+					if ( filename == NULL ) filename = switchfile;
 					fp = fopen(filename, "r");
 			//00-12-3F-B3-66-DC	1	20	Dynamic	Aging
 					if (fp == NULL)return(1);
