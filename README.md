@@ -34,13 +34,34 @@ The master xml file format is based on the xml format used by nmap. A short exam
   </host>
 </nmaprun>
 
-The input file is expected to be on MACdata.xml. When the program terminates, an updated copy of the file will be saved as MACdataOut.xml. If you are happy with the run, you should move MACdataOut.xml to MACdata.xml. Doing so will permanently save any new MAC data that the program found.
+The input file is expected to be on MACdata.xml. When the program terminates, an updated copy of the file will be saved as MACdataOut.xml and a copy of the old mac data is saved in oldmaclist.txt. If you are happy with the run, you should move MACdataOut.xml to MACdata.xml. Doing so will permanently save any new MAC data that the program found.
 
-The program takes two run time optional arguments: 
-The first argument is primarily used for program debug/checkout. It controlls which section of the code (which input file) is to be run. If set to "all", then all of the input files will be read.
-The second argument specifies the name of the file containing switch information. By succesively runing the program against each switch on the network and examining the portlist.txt output file, it's posible to guess the relative configuration of the network.
+The program takes three run time optional arguments:
+The first argument is the location of the "config" file. This file contains a list of all of the input files to be processed as well as their respective output (listing) files. The format of the config file is listed below.
+The second argument is primarily used for program debug/checkout. It controlls which section of the code (which input file) is to be run. If set to "all", then all of the input files will be read.
+The third argument specifies the name of the file containing switch information. This argument is ignored if a switchfile is specified in the config file. By succesively running the program against each switch on the network and examining the portlist.txt output file, it's posible to guess the relative configuration of the network.
 
-The portlist.txt output file looks something lke this:
+The "config" file looks similar to this:
+
+1,opsiMACs.csv,maclist.txt,0
+2,scan2X.txt,maclistscan.txt,0
+3,unifimac.txt,maclist3.txt,0
+4,leases.txt,maclist4.txt,0
+5,oui.txt,ouilist.txt,0
+6,T2600G-28TS-SEP24.txt,portlist-T2600G-28TS-SEP24.txt,0
+
+Each line specifies a file to be processed. The first field on the line is the file type. the file types are as follows:
+1 -> opsi data
+2 -> local network scan
+3 -> UniFi WiFi data
+4 -> dhcp lease data
+5 -> OUI database file
+6 -> switch data file
+The second field is the name of the input file. The third field is the name to use for the output file. The fourth field is not currently used. However, it needs to be present. It is intended to be used to specify additional format information.
+Note that the lines in the config file are processed in the order that they are read. So, if you intend to process switch data using your latest updates to the MAC database, you should include all type 6 lines at the end of the file (after your latest MAC updates).
+
+
+The portlist output file is produced when processing type 6 input. The default file name is portlist.txt. The output file looks something lke this:
 
  line found : "T2600G-28TS(config)#show mac address-table vlan 1"
  line found : ""
@@ -90,7 +111,7 @@ Port 5
 
 The initial section is an echo of the (switch) input file with some diagnostic messages. The bottom section is a sorted list (by swich port number) of all of the machines that the switch has recently seen. The input file includes the switch's MAC cache.
 
-The opsi input file is opsiMACs.csv. It is created using configed: First, show all clients and make sure that "Show OPSI MAC address" is selected in the clients pane. Select all of the data in the clients pane and copy it to your clipboard (use <ctrl>Ins). Next open your speadsheet program and paste the clipboard data into a blank worksheet. Finally, save the data in .csv format. If the data is coming form Windows, you'll likely need to convert it to 8 bit ascii. (use dos2uni). The final file should look something like the following:
+The type 1 input is opsi data. The default opsi input file name is opsiMACs.csv. It is created using configed: First, show all clients and make sure that "Show OPSI MAC address" is selected in the clients pane. Select all of the data in the clients pane and copy it to your clipboard (use <ctrl>Ins). Next open your speadsheet program and paste the clipboard data into a blank worksheet. Finally, save the data in .csv format. If the data is coming form Windows, you'll likely need to convert it to 8 bit ascii. (use dos2uni). The final file should look something like the following:
 
 "andrew.swag.local","student tablet (RCA)",,"2020-03-17 14:45:47","10.0.0.111","0c:9a:42:18:3f:6c"
 "bethlehem.swag.local","student tablet",,"2020-09-02 11:03:52","10.0.0.151","88:12:4e:0f:3d:3c"
@@ -102,10 +123,10 @@ The opsi input file is opsiMACs.csv. It is created using configed: First, show a
 .
 
 
-The local network scan data is expected on file scan2X.txt. It should be in standard nmap xml output format. For example, it can be generated as so: sudo nmap -sn -oX scan2X.txt 10.0.0.0/23
+The default input file name for type 2 input (local network scan data) is scan2X.txt. It should be in standard nmap xml output format. For example, it can be generated as so: sudo nmap -sn -oX scan2X.txt 10.0.0.0/23
 
 
-The UniFi WiFi mac data is expected on file unifimac.txt. It is generated using the UniFi controler web app. Open the controller and select the "Insights" tab. Use your mouse to select all of the data displayed in the main pane and copy to your clipboard. Paste the data into a text editor. The file will look something like this:
+The default input file name for type 3 input (UniFi WiFi mac data) is unifimac.txt. It is generated using the UniFi controler web app. Open the controller and select the "Insights" tab. Use your mouse to select all of the data displayed in the main pane and copy to your clipboard. Paste the data into a text editor. The file will look something like this:
 
 
 	Name	Manufacturer	Mac	Fixed IP	User/Guest	Down	Up	First Seen	Last Seen	
@@ -123,7 +144,7 @@ Rows per page
 .
 
 
-The dhcp lease input file is expected on leases.txt. If your dhcp server is a Windows server, it can be generated using your dhcp server snap in. Select your server - IPv4 - Scope - Address Leases in the left hand pane. Select all of the data in the center pane and then click the "Export List" button on the toolbar. Select the csv output format. Note that this file will need to be converted to 8 bit ascii when you move it to your linux machine...   A sample output follows:
+The default input file name for type 4 input (dhcp lease input file) is leases.txt. If your dhcp server is a Windows server, it can be generated using your dhcp server snap in. Select your server - IPv4 - Scope - Address Leases in the left hand pane. Select all of the data in the center pane and then click the "Export List" button on the toolbar. Select the csv output format. Note that this file will need to be converted to 8 bit ascii when you move it to your linux machine...   A sample output follows:
 
 
 Client IP Address,Name,Lease Expiration,Type,Unique ID,Description,Network Access Protection,Probation Expiration,Filter Profile,Policy
@@ -139,8 +160,8 @@ Client IP Address,Name,Lease Expiration,Type,Unique ID,Description,Network Acces
 .
 .
 
-A current copy of the OUI database file is expected on oui.txt. See the comment near the top of this file for where to download this guy...
-The body of the file will look something like this:
+The default input file name for type 5 input (a current copy of the OUI database file) is oui.txt. See the comment near the top of this file for where to download this guy...
+The main body of the file will look something like this:
 
 00:00:00	00:00:00	Officially Xerox, but 0:0:0:0:0:0 is more common
 00:00:01	Xerox	Xerox Corporation
@@ -162,7 +183,7 @@ The body of the file will look something like this:
 .
 
 
-If the name of the MAC data from the switches not spoecified as an argument top the program, it will look for a file named 24portMACs.txt. The format of thsi file is based on the ouput produced by T-Link managed switches (which varies somewhat between models). A sample follows:
+The default input file name for type 6 input (switch data) is 24portMACs.txt. However, this file name can also be specified as a run time argument to the program. The format of this file is based on the ouput produced by T-Link managed switches (which varies somewhat between models). A sample follows:
 
 
 00-12-3F-B3-66-DC	1	20	Dynamic	Aging
