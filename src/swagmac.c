@@ -4,7 +4,7 @@
  Author      : John Kuras
  Version     :
  Copyright   : free
- Description : id swah computers via mac address in C, Ansi-style
+ Description : id SWAG computers via mac address in C, Ansi-style
  ============================================================================
  */
 
