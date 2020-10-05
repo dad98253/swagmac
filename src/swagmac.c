@@ -26,7 +26,7 @@ ssize_t getline(char** lineptr, size_t* n, FILE* stream)
 #endif
 
 #define LINELEN	250
-#define NUMCOMP 600
+#define NUMCOMP 1000
 #define NUMOUI 60000
 #define LINELENp5	LINELEN + 5
 #define NUMPORTS	24
@@ -94,6 +94,7 @@ int main(int argc, char* argv[])
 {
 	FILE *fp;
 	FILE *fp2;
+	FILE *fpconf;
 	char * line = NULL;
 	size_t len = LINELEN;
 	ssize_t read;
@@ -101,14 +102,15 @@ int main(int argc, char* argv[])
 //	char * redir;
 //	char redir1[] = ">";
 //	char redir2[] = ">>";
-	int first = 0;
-	int second = 0;
-	int third = 0;
-	int fourth = 0;
-	int fifth = 0;
-	int sixth = 0;
+	int first = 1;
+	int second = 1;
+	int third = 1;
+	int fourth = 1;
+	int fifth = 1;
+	int sixth = 1;
 	char *filename;
-	char *switchfile;
+	char *outfilename;
+//	char *switchfile;
 	char tname[LINELEN];
 	char tven[LINELEN];
 	char tip[LINELEN];
@@ -116,6 +118,8 @@ int main(int argc, char* argv[])
 	char tport[LINELEN];
 	char * ttname;
 	char * ttven;
+	char *defconffile = "swagmac.conf";
+	char *confFile;
 	int linenum = 0;
 	unsigned long long tmacll;
 	unsigned long long tmaskll;
@@ -123,27 +127,16 @@ int main(int argc, char* argv[])
 	int i;
 	int icomp;
 	int port;
+	int numfiles = 0;
+	int filetype;
+	int fmtType;
 
+	confFile = defconffile;
 	if (argc > 1) {
-		if ((strcmp(argv[1], "all") == 0) | (strcmp(argv[1], "first") == 0)) first = 1;
-		if ((strcmp(argv[1], "all") == 0) | (strcmp(argv[1], "second") == 0)) second = 1;
-		if ((strcmp(argv[1], "all") == 0) | (strcmp(argv[1], "third") == 0)) third = 1;
-		if ((strcmp(argv[1], "all") == 0) | (strcmp(argv[1], "fourth") == 0)) fourth = 1;
-		if ((strcmp(argv[1], "all") == 0) | (strcmp(argv[1], "fifth") == 0)) fifth = 1;
-		if ((strcmp(argv[1], "all") == 0) | (strcmp(argv[1], "sixth") == 0)) sixth = 1;
-	}
-	else {
-		first = 1;
-		second = 1;
-		third = 1;
-		fourth = 1;
-		fifth = 1;
-		sixth = 1;
-	}
-	switchfile = "24portMACs.txt";
-	if (argc > 2)  switchfile = argv[2] ;
+			if ((strlen(argv[1]) > 0)) confFile = argv[1];
+		}
 
-//	redir = redir1;
+
 	line = (char*)malloc(size);
 	compdb = (CompDbStructure*)malloc(sizeof(CompDbStructure)*NUMCOMP);
 	ouidb = (OuiDbStructure*)malloc(sizeof(OuiDbStructure)*NUMOUI);
@@ -160,453 +153,585 @@ int main(int argc, char* argv[])
 			fclose(fp2);
 		}
 
-	if (first) {
-		filename = "opsiMACs.csv";
-		fp = fopen(filename, "r");
-// "andrew.swag.local","student tablet (RCA)",,"2020-03-17 14:45:47","10.0.0.111","0c:9a:42:18:3f:6c"
-		if (fp == NULL)return(1);
-		printf(" processing %s\n",filename);
+	fpconf = fopen(confFile, "r");
+// 1,opsiMACs.csv,maclist.txt,0
+	if (fpconf == NULL)return(12);
+	printf(" processing %s\n",confFile);
+	int confcolns[] = {0,1,2,3};
+#define NCONFLABS 4
+	int nconflabs = NCONFLABS;
+	char * confdata[NCONFLABS];
+	for (i=0;i<nconflabs;i++) confdata[i] = (char*)malloc(LINELEN);
 
-		fp2 = fopen("maclist.txt", "w");
-		if (fp2 == NULL)return(2);
+	while ((read = getline(&line, &len, fpconf)) != -1) {
+		//	        printf("Retrieved config line of length %zu:\n", read);
+		line[read - 1] = '\000';
+		numfiles++;
+		fprintf(stderr," config input found : \"%s\"\n", line);
+		if (parsline3(line,nconflabs,confcolns,confdata,(char *)",") != 0) continue;
+		filename = NULL;
+		outfilename = NULL;
+		filetype = 0;
+		fmtType = 0;
+		if (strlen(confdata[0]) > 0) {
+			if ( sscanf(confdata[0],"%u",&filetype) != 1 ) return (0);
+		}
+		if (strlen(confdata[1]) > 0) filename = confdata[1];
+		if (strlen(confdata[2]) > 0) outfilename = confdata[2];
+		if (strlen(confdata[3]) > 0) {
+			if ( sscanf(confdata[3],"%u",&fmtType) != 1 ) return (0);
+		}
 
-		int numnew = 0;
-		while ((read = getline(&line, &len, fp)) != -1) {
-			//	        printf("Retrieved line of length %zu:\n", read);
-			line[read - 1] = '\000';
-			linenum++;
-			fprintf(fp2," line found : \"%s\"\n", line);
-			if (parsline(line,tname,tip,tmac) != 0) continue;
-			if(strlen(tmac)<17) {
-				fprintf(fp2," error : mac address bad on line %i\n",linenum);
-				continue;
-			}
-			if (macstr2ll(tmac,&tmacll,&tmaskll,1)) {
-				fprintf(fp2," error : bad mac address format on line %i\n",linenum);
-				continue;
-			}
-			tipl = ipstr2l(tip);
-			ttname = (char*)malloc(strlen(tname)+4);
-			strcpy(ttname,tname);
-			compt.Name = ttname;
-			compt.MAC = tmacll;
-			compt.IP = tipl;
-			compt.PortNumber = -1;
-			if ((icomp = findmac(tmacll)) == -1 ) {
-				compdb[numcomps] = compt;
-				numcomps++;
-				numnew++;
-				if ( numcomps > NUMCOMP ) {
-					printf("error: too many computers found!\n");
-					return(3);
+
+
+		switch (filetype)
+		{
+			case 1:
+				if (first) {
+					if(filename == NULL) filename = "opsiMACs.csv";
+					fp = fopen(filename, "r");
+			// "andrew.swag.local","student tablet (RCA)",,"2020-03-17 14:45:47","10.0.0.111","0c:9a:42:18:3f:6c"
+					if (fp == NULL)return(1);
+					printf(" processing %s\n",filename);
+
+					fp2 = fopen(outfilename, "w");
+					if (fp2 == NULL)return(2);
+
+					int numnew = 0;
+					while ((read = getline(&line, &len, fp)) != -1) {
+						//	        printf("Retrieved line of length %zu:\n", read);
+						line[read - 1] = '\000';
+						linenum++;
+						fprintf(fp2," line found : \"%s\"\n", line);
+						if (parsline(line,tname,tip,tmac) != 0) continue;
+						if(strlen(tmac)<17) {
+							fprintf(fp2," error : mac address bad on line %i\n",linenum);
+							continue;
+						}
+						if (macstr2ll(tmac,&tmacll,&tmaskll,1)) {
+							fprintf(fp2," error : bad mac address format on line %i\n",linenum);
+							continue;
+						}
+						tipl = ipstr2l(tip);
+						ttname = (char*)malloc(strlen(tname)+4);
+						strcpy(ttname,tname);
+						compt.Name = ttname;
+						compt.MAC = tmacll;
+						compt.IP = tipl;
+						compt.PortNumber = -1;
+						if ((icomp = findmac(tmacll)) == -1 ) {
+							compdb[numcomps] = compt;
+							numcomps++;
+							numnew++;
+							if ( numcomps > NUMCOMP ) {
+								printf("error: too many computers found!\n");
+								return(3);
+							}
+						} else {
+							fprintf(fp2," warning : MAC address duplicated at line %i. Dup with icomp = %i (\"%s\")\n",linenum,icomp,(compdb+icomp)->Name);
+			//				compdb[icomp] = compt;
+						}
+
+			//			if ( strlen(line) > 2 ) fprintf(fp2, "dsquery * %s -scope base -attr objectSid %s studentSIDs.txt\n", line, redir);
+			//			redir = redir2;
+					}
+					fclose(fp);
+					if (numcomps>0) {
+						for (i=0;i<numcomps;i++) {
+							printcomp(compdb+i,fp2);
+						}
+					}
+					printf(" %i new MACs found\n",numnew);
+					fclose(fp2);
 				}
-			} else {
-				fprintf(fp2," warning : MAC address duplicated at line %i. Dup with icomp = %i (\"%s\")\n",linenum,icomp,(compdb+icomp)->Name);
-//				compdb[icomp] = compt;
-			}
+				break;
 
-//			if ( strlen(line) > 2 ) fprintf(fp2, "dsquery * %s -scope base -attr objectSid %s studentSIDs.txt\n", line, redir);
-//			redir = redir2;
+		    case 2:
+
+		/*
+		<?xml version="1.0" encoding="UTF-8"?>
+		<!DOCTYPE nmaprun>
+		<host><status state="up" reason="arp-response" reason_ttl="0"/>
+		<address addr="10.0.0.1" addrtype="ipv4"/>
+		<address addr="5C:F4:AB:6D:F4:FB" addrtype="mac" vendor="ZyXEL Communications"/>
+		<hostnames>
+		<hostname name="_gateway" type="PTR"/>
+		</hostnames>
+		<times srtt="700" rttvar="5000" to="100000"/>
+		</host>
+	*/
+
+				if (second) {
+					xmlDocPtr doc;
+					xmlNodePtr cur;
+					int numnew = 0;
+					if ( filename == NULL ) filename = "scan2X.txt";
+					printf(" processing %s\n",filename);
+
+					fp2 = fopen(outfilename, "w");
+					if (fp2 == NULL)return(2);
+
+					doc = xmlParseFile(filename);
+					if (doc == NULL ) {
+							fprintf(stderr,"Document not parsed successfully. \n");
+							return(1);
+						}
+
+					cur = xmlDocGetRootElement(doc);
+
+					if (cur == NULL) {
+						fprintf(stderr,"empty document\n");
+						xmlFreeDoc(doc);
+						return(2);
+					}
+
+					if (xmlStrcmp(cur->name, (const xmlChar *) "nmaprun")) {
+							fprintf(stderr,"document of the wrong type, root node != nmaprun");
+							xmlFreeDoc(doc);
+							return(3);
+					}
+
+					cur = cur->xmlChildrenNode;
+					fprintf(fp2,"------------------\n");
+					while (cur != NULL) {
+						if ((!xmlStrcmp(cur->name, (const xmlChar *)"host"))){
+							parseScan (doc, cur, &numnew, fp2);
+							fprintf(fp2,"------------------\n");
+						}
+					cur = cur->next;
+					}
+
+					xmlFreeDoc(doc);
+					printf(" %i new MACs found\n",numnew);
+					fclose(fp2);
+				}
+				break;
+
+		    case 3:
+				if (third) {
+					if ( filename == NULL ) filename = "unifimac.txt";
+					fp = fopen(filename, "r");
+			//	ica-2007	IntelCor	00:21:6b:eb:c1:2a	-	User	6.75 GB	309 MB	07/30/2020 6:12 pm	09/07/2020 10:15 am
+					if (fp == NULL)return(1);
+					printf(" processing %s\n",filename);
+
+					fp2 = fopen(outfilename, "w");
+					if (fp2 == NULL)return(2);
+
+					int colns[] = {3,1,2};
+			#define NLABS 3
+					int nlabs = NLABS;
+					char * cdata[NLABS];
+					int numnew = 0;
+
+					for (i=0;i<NLABS;i++) cdata[i] = (char*)malloc(LINELEN);
+
+					linenum = 0;
+					while ((read = getline(&line, &len, fp)) != -1) {
+						//	        printf("Retrieved line of length %zu:\n", read);
+						line[read - 1] = '\000';
+						linenum++;
+						fprintf(fp2," line found : \"%s\"\n", line);
+						if (parsline3(line,nlabs,colns,cdata,(char *)"\t") != 0) continue;
+						tmac[0] = '\000';
+						tname[0] = '\000';
+						tven[0] = '\000';
+						if (strlen(cdata[0]) > 0) strcpy(tmac,cdata[0]);
+						if (strlen(cdata[1]) > 0) strcpy(tname,cdata[1]);
+						if (strlen(cdata[2]) > 0) strcpy(tven,cdata[2]);
+						if(strlen(tmac)<17) {
+							fprintf(fp2," error : mac address bad on line %i\n",linenum);
+							continue;
+						}
+						if (macstr2ll(tmac,&tmacll,&tmaskll,1)) {
+							fprintf(fp2," error : bad mac address format on line %i\n",linenum);
+							continue;
+						}
+			//			tipl = ipstr2l(tip);
+						ttname = (char*)malloc(strlen(tname)+4);
+						ttven = (char*)malloc(strlen(tven)+4);
+						strcpy(ttname,tname);
+						strcpy(ttven,tven);
+						compt.Name = ttname;
+						compt.Vendor = ttven;
+						compt.MAC = tmacll;
+						compt.IP = 0;
+						compt.PortNumber = -1;
+						if ((icomp = findmac(tmacll)) == -1 ) {
+							compdb[numcomps] = compt;
+							numcomps++;
+							numnew++;
+						} else {
+							if (strlen(tname) > 0) {
+								free((compdb+icomp)->Name);
+								(compdb+icomp)->Name = compt.Name;
+							} else {
+								free(ttname);
+							}
+							if (strlen(tven) > 0) {
+								free((compdb+icomp)->Vendor);
+								(compdb+icomp)->Vendor = compt.Vendor;
+							} else {
+								free(ttven);
+							}
+			//				if (strlen(tip) > 0) (compdb+icomp)->IP = compt.IP;
+							fprintf(fp2," warning : MAC address duplicated. Dup with icomp = %i (\"%s\")\n",icomp,(compdb+icomp)->Name);
+				//				compdb[icomp] = compt;
+						}
+
+			//			if ( strlen(line) > 2 ) fprintf(fp2, "dsquery * %s -scope base -attr objectSid %s studentSIDs.txt\n", line, redir);
+			//			redir = redir2;
+					}
+					fclose(fp);
+					for (i=0;i<NLABS;i++) free(cdata[i]);
+					if (numcomps>0) {
+						for (i=0;i<numcomps;i++) {
+							printcomp(compdb+i,fp2);
+						}
+					}
+					printf(" %i new MACs found\n",numnew);
+					fclose(fp2);
+				}
+				break;
+
+		    case 4:
+				if (fourth) {
+					if ( filename == NULL ) filename = "leases.txt";
+					fp = fopen(filename, "r");
+			//10.0.0.11	DESKTOP-SDRAR14.SWAG.local	9/25/2020 4:53:37 PM	DHCP	d017c28ba606		Full Access	N/A	None
+					if (fp == NULL)return(1);
+					printf(" processing %s\n",filename);
+
+					fp2 = fopen(outfilename, "w");
+					if (fp2 == NULL)return(2);
+
+			//		int colns[] = {5,1,0};
+					int colns[] = {4,1,0};
+			#define NLABS2 3
+					int nlabs = NLABS2;
+					char * cdata[NLABS2];
+					int numnew = 0;
+
+					for (i=0;i<nlabs;i++) cdata[i] = (char*)malloc(LINELEN);
+
+					linenum = 0;
+					while ((read = getline(&line, &len, fp)) != -1) {
+						//	        printf("Retrieved line of length %zu:\n", read);
+						line[read - 1] = '\000';
+						linenum++;
+						fprintf(fp2," line found : \"%s\"\n", line);
+			//			if (parsline3(line,nlabs,colns,cdata,(char *)"\t") != 0) continue;
+						if (parsline3(line,nlabs,colns,cdata,(char *)",") != 0) continue;
+						tmac[0] = '\000';
+						tname[0] = '\000';
+						tip[0] = '\000';
+						if (strlen(cdata[0]) > 0) strcpy(tmac,cdata[0]);
+						if (strlen(cdata[1]) > 0) strcpy(tname,cdata[1]);
+						if (strlen(cdata[2]) > 0) strcpy(tip,cdata[2]);
+			//			if(strlen(tmac)<17) {
+						if(strlen(tmac)<12) {
+							fprintf(fp2," error : mac address bad on line %i\n",linenum);
+							continue;
+						}
+						if (macstr2ll(tmac,&tmacll,&tmaskll,3)) {
+							fprintf(fp2," error : bad mac address format on line %i\n",linenum);
+							continue;
+						}
+						tipl = ipstr2l(tip);
+						ttname = (char*)malloc(strlen(tname)+4);
+						strcpy(ttname,tname);
+						compt.Name = ttname;
+						compt.MAC = tmacll;
+						compt.IP = tipl;
+						compt.PortNumber = -1;
+						if ((icomp = findmac(tmacll)) == -1 ) {
+							compdb[numcomps] = compt;
+							numcomps++;
+							numnew++;
+						} else {
+							if (strlen(tname) > 0) {
+								free((compdb+icomp)->Name);
+								(compdb+icomp)->Name = compt.Name;
+							} else {
+								free(ttname);
+							}
+							if (strlen(tip) > 0) (compdb+icomp)->IP = compt.IP;
+							fprintf(fp2," warning : MAC address duplicated. Dup with icomp = %i (\"%s\")\n",icomp,(compdb+icomp)->Name);
+				//				compdb[icomp] = compt;
+						}
+
+			//			if ( strlen(line) > 2 ) fprintf(fp2, "dsquery * %s -scope base -attr objectSid %s studentSIDs.txt\n", line, redir);
+			//			redir = redir2;
+					}
+					fclose(fp);
+					for (i=0;i<nlabs;i++) free(cdata[i]);
+					if (numcomps>0) {
+						for (i=0;i<numcomps;i++) {
+							printcomp(compdb+i,fp2);
+						}
+					}
+					printf(" %i new MACs found\n",numnew);
+					fclose(fp2);
+				}
+				break;
+
+		    case 5:
+				if (fifth) {
+			// load oui database
+					if ( filename == NULL ) filename = "oui.txt";
+					fp = fopen(filename, "r");
+			//00:00:01	Xerox	Xerox Corporation
+					if (fp == NULL)return(1);
+					printf(" processing %s\n",filename);
+
+					fp2 = fopen(outfilename, "w");
+					if (fp2 == NULL)return(2);
+
+					int colns[] = {0,1,2};
+			#define NLABS3 3
+					int nlabs = NLABS3;
+					char * cdata[NLABS3];
+
+					for (i=0;i<nlabs;i++) cdata[i] = (char*)malloc(LINELEN);
+
+					linenum = 0;
+					while ((read = getline(&line, &len, fp)) != -1) {
+						//	        printf("Retrieved line of length %zu:\n", read);
+						line[read - 1] = '\000';
+						linenum++;
+						fprintf(fp2," line found : \"%s\"\n", line);
+						if (line[0] == '#' ) continue;
+						if (parsline3(line,nlabs,colns,cdata,(char *)"\t") != 0) continue;
+						tmac[0] = '\000';
+						tname[0] = '\000';
+						tven[0] = '\000';
+						if (strlen(cdata[0]) > 0) strcpy(tmac,cdata[0]);
+						if (strlen(cdata[1]) > 0) strcpy(tname,cdata[1]);
+						if (strlen(cdata[2]) > 0) strcpy(tven,cdata[2]);
+						if(strlen(tmac)<8) {
+							fprintf(fp2," error : mac address bad on line %i\n",linenum);
+							continue;
+						}
+						if (macstr2ll(tmac,&tmacll,&tmaskll,1)) {
+							fprintf(fp2," error : bad mac address format on line %i\n",linenum);
+							continue;
+						}
+						ttname = (char*)malloc(strlen(tname)+4);
+						ttven = (char*)malloc(strlen(tven)+4);
+						strcpy(ttname,tname);
+						strcpy(ttven,tven);
+						oui.ShortName = ttname;
+						oui.LongName = ttven;
+						oui.MAC = tmacll;
+						oui.Mask = tmaskll;
+						ouidb[numoui] = oui;
+						numoui++;
+						if (numoui > NUMOUI) {
+							printf("too many oui entries!\n");
+							return(4);
+						}
+					}
+					fclose(fp);
+					for (i=0;i<nlabs;i++) free(cdata[i]);
+					if (numoui>0) {
+						for (i=0;i<numoui;i++) {
+							printoui(ouidb+i,fp2);
+						}
+					}
+					printf(" %i OUIs found\n",numoui);
+					fclose(fp2);
+				}
+
+			// loop through all computers and fill in all missing vendor names
+				int numfound = 0;
+				int ifound;
+				char bogus[] = "bogus";
+				if (numcomps>0) {
+					for (i=0;i<numcomps;i++) {
+						if ( (compdb+i)->Vendor == NULL) {
+							tven[0] = '\000';
+							if ( (ifound = findvendor((compdb+i)->MAC,tven)) < 0 ) {
+								ttven = (char*)malloc(strlen(bogus)+4);
+								strcpy(ttven,bogus);
+								(compdb+i)->Vendor = ttven;
+								numfound++;
+								continue;
+							}
+							if (strlen(tven)>0) {
+								ttven = (char*)malloc(strlen(tven)+4);
+								strcpy(ttven,tven);
+								(compdb+i)->Vendor = ttven;
+								numfound++;
+							}
+							if (fourth) {
+								filename = "leases.txt";
+								fp = fopen(filename, "r");
+						//10.0.0.11	DESKTOP-SDRAR14.SWAG.local	9/25/2020 4:53:37 PM	DHCP	d017c28ba606		Full Access	N/A	None
+								if (fp == NULL)return(1);
+								printf(" processing %s\n",filename);
+
+								fp2 = fopen("maclist4.txt", "w");
+								if (fp2 == NULL)return(2);
+
+						//		int colns[] = {5,1,0};
+								int colns[] = {4,1,0};
+						#define NLABS2 3
+								int nlabs = NLABS2;
+								char * cdata[NLABS2];
+								int numnew = 0;
+
+								for (i=0;i<nlabs;i++) cdata[i] = (char*)malloc(LINELEN);
+
+								linenum = 0;
+								while ((read = getline(&line, &len, fp)) != -1) {
+									//	        printf("Retrieved line of length %zu:\n", read);
+									line[read - 1] = '\000';
+									linenum++;
+									fprintf(fp2," line found : \"%s\"\n", line);
+						//			if (parsline3(line,nlabs,colns,cdata,(char *)"\t") != 0) continue;
+									if (parsline3(line,nlabs,colns,cdata,(char *)",") != 0) continue;
+									tmac[0] = '\000';
+									tname[0] = '\000';
+									tip[0] = '\000';
+									if (strlen(cdata[0]) > 0) strcpy(tmac,cdata[0]);
+									if (strlen(cdata[1]) > 0) strcpy(tname,cdata[1]);
+									if (strlen(cdata[2]) > 0) strcpy(tip,cdata[2]);
+						//			if(strlen(tmac)<17) {
+									if(strlen(tmac)<12) {
+										fprintf(fp2," error : mac address bad on line %i\n",linenum);
+										continue;
+									}
+									if (macstr2ll(tmac,&tmacll,&tmaskll,3)) {
+										fprintf(fp2," error : bad mac address format on line %i\n",linenum);
+										continue;
+									}
+									tipl = ipstr2l(tip);
+									ttname = (char*)malloc(strlen(tname)+4);
+									strcpy(ttname,tname);
+									compt.Name = ttname;
+									compt.MAC = tmacll;
+									compt.IP = tipl;
+									compt.PortNumber = -1;
+									if ((icomp = findmac(tmacll)) == -1 ) {
+										compdb[numcomps] = compt;
+										numcomps++;
+										numnew++;
+									} else {
+										if (strlen(tname) > 0) {
+											free((compdb+icomp)->Name);
+											(compdb+icomp)->Name = compt.Name;
+										} else {
+											free(ttname);
+										}
+										if (strlen(tip) > 0) (compdb+icomp)->IP = compt.IP;
+										fprintf(fp2," warning : MAC address duplicated. Dup with icomp = %i (\"%s\")\n",icomp,(compdb+icomp)->Name);
+							//				compdb[icomp] = compt;
+									}
+
+						//			if ( strlen(line) > 2 ) fprintf(fp2, "dsquery * %s -scope base -attr objectSid %s studentSIDs.txt\n", line, redir);
+						//			redir = redir2;
+								}
+								fclose(fp);
+								for (i=0;i<nlabs;i++) free(cdata[i]);
+								if (numcomps>0) {
+									for (i=0;i<numcomps;i++) {
+										printcomp(compdb+i,fp2);
+									}
+								}
+								printf(" %i new MACs found\n",numnew);
+								fclose(fp2);
+							}
+						}
+						if ( strlen((compdb+i)->Vendor) == 0) {
+							free((compdb+i)->Vendor);
+							tven[0] = '\000';
+							if ( (ifound = findvendor((compdb+i)->MAC,tven)) < 0 ) {
+								ttven = (char*)malloc(strlen(bogus)+4);
+								strcpy(ttven,bogus);
+								(compdb+i)->Vendor = ttven;
+								numfound++;
+								continue;
+							}
+							if (strlen(tven)>0) {
+								ttven = (char*)malloc(strlen(tven)+4);
+								strcpy(ttven,tven);
+								(compdb+i)->Vendor = ttven;
+								numfound++;
+								continue;
+							}
+						}
+					}
+				}
+				printf(" %i more vendors identified\n",numfound);
+				break;
+
+		    case 6:
+				if (sixth) {
+//					filename = switchfile;
+					fp = fopen(filename, "r");
+			//00-12-3F-B3-66-DC	1	20	Dynamic	Aging
+					if (fp == NULL)return(1);
+					printf(" processing %s\n",filename);
+
+					fp2 = fopen(outfilename, "w");
+					if (fp2 == NULL)return(2);
+
+					linenum = 0;
+					while ((read = getline(&line, &len, fp)) != -1) {
+						//	        printf("Retrieved line of length %zu:\n", read);
+						line[read - 1] = '\000';
+						linenum++;
+						fprintf(fp2," line found : \"%s\"\n", line);
+						if (parsline2(line,tmac,tport) != 0) continue;
+						if(strlen(tmac)<17) {
+							fprintf(fp2," error : mac address bad on line %i\n",linenum);
+							continue;
+						}
+						if (macstr2ll(tmac,&tmacll,&tmaskll,2)) {
+							fprintf(fp2," error : bad mac address format on line %i\n",linenum);
+							continue;
+						}
+						if (portstr2int(tport,&port)) {
+							fprintf(fp2," error : bad port format on line %i\n",linenum);
+							continue;
+						}
+						if ((icomp = findmac(tmacll)) == -1 ) {
+							tven[0] = '\000';
+							if ( findvendor(tmacll,tven) < 0 ) {
+								fprintf(fp2," warning : MAC address connected to port %i at line %i not in database. It's vendor is bogus\n",port,linenum);
+							} else {
+								fprintf(fp2," warning : MAC address connected to port %i at line %i not in database. It's vendor is %s\n",port,linenum,tven);
+							}
+						} else {
+							if ( compdb[icomp].PortNumber > 0 ) {
+								fprintf(fp2," warning : MAC address found at multiple ports (%i at line %i, %i in database).\n",port,linenum,compdb[icomp].PortNumber);
+							}
+							compdb[icomp].PortNumber = port;
+						}
+					}
+					fclose(fp);
+					if (numcomps>0) {
+						for (i=0;i<NUMPORTS;i++) {
+							for (int j=0;j<numcomps;j++) {
+								if ( compdb[j].PortNumber == i ) printcomp(compdb+j,fp2);
+							}
+						}
+					}
+					fclose(fp2);
+				}
+				break;
+
+		    default:
+		    	break;
+// end of switch statement on file type
 		}
-		fclose(fp);
-		if (numcomps>0) {
-			for (i=0;i<numcomps;i++) {
-				printcomp(compdb+i,fp2);
-			}
-		}
-		printf(" %i new MACs found\n",numnew);
-		fclose(fp2);
+
+// end of while on config file
 	}
+	fprintf(stderr," %i config lines processes\n",numfiles);
+	fclose(fpconf);
+	for (i=0;i<nconflabs;i++) free(confdata[i]);
 
-	/*
-	<?xml version="1.0" encoding="UTF-8"?>
-	<!DOCTYPE nmaprun>
-	<host><status state="up" reason="arp-response" reason_ttl="0"/>
-	<address addr="10.0.0.1" addrtype="ipv4"/>
-	<address addr="5C:F4:AB:6D:F4:FB" addrtype="mac" vendor="ZyXEL Communications"/>
-	<hostnames>
-	<hostname name="_gateway" type="PTR"/>
-	</hostnames>
-	<times srtt="700" rttvar="5000" to="100000"/>
-	</host>
-*/
-
-	if (second) {
-		xmlDocPtr doc;
-		xmlNodePtr cur;
-		int numnew = 0;
-		filename = "scan2X.txt";
-		printf(" processing %s\n",filename);
-
-		fp2 = fopen("maclistscan.txt", "w");
-		if (fp2 == NULL)return(2);
-
-		doc = xmlParseFile(filename);
-		if (doc == NULL ) {
-				fprintf(stderr,"Document not parsed successfully. \n");
-				return(1);
-			}
-
-		cur = xmlDocGetRootElement(doc);
-
-		if (cur == NULL) {
-			fprintf(stderr,"empty document\n");
-			xmlFreeDoc(doc);
-			return(2);
-		}
-
-		if (xmlStrcmp(cur->name, (const xmlChar *) "nmaprun")) {
-				fprintf(stderr,"document of the wrong type, root node != nmaprun");
-				xmlFreeDoc(doc);
-				return(3);
-		}
-
-		cur = cur->xmlChildrenNode;
-		fprintf(fp2,"------------------\n");
-		while (cur != NULL) {
-			if ((!xmlStrcmp(cur->name, (const xmlChar *)"host"))){
-				parseScan (doc, cur, &numnew, fp2);
-				fprintf(fp2,"------------------\n");
-			}
-		cur = cur->next;
-		}
-
-		xmlFreeDoc(doc);
-		printf(" %i new MACs found\n",numnew);
-		fclose(fp2);
-	}
-
-
-	if (third) {
-		filename = "unifimac.txt";
-		fp = fopen(filename, "r");
-//	ica-2007	IntelCor	00:21:6b:eb:c1:2a	-	User	6.75 GB	309 MB	07/30/2020 6:12 pm	09/07/2020 10:15 am
-		if (fp == NULL)return(1);
-		printf(" processing %s\n",filename);
-
-		fp2 = fopen("maclist3.txt", "w");
-		if (fp2 == NULL)return(2);
-
-		int colns[] = {3,1,2};
-#define NLABS 3
-		int nlabs = NLABS;
-		char * cdata[NLABS];
-		int numnew = 0;
-
-		for (i=0;i<NLABS;i++) cdata[i] = (char*)malloc(LINELEN);
-
-		linenum = 0;
-		while ((read = getline(&line, &len, fp)) != -1) {
-			//	        printf("Retrieved line of length %zu:\n", read);
-			line[read - 1] = '\000';
-			linenum++;
-			fprintf(fp2," line found : \"%s\"\n", line);
-			if (parsline3(line,nlabs,colns,cdata,(char *)"\t") != 0) continue;
-			tmac[0] = '\000';
-			tname[0] = '\000';
-			tven[0] = '\000';
-			if (strlen(cdata[0]) > 0) strcpy(tmac,cdata[0]);
-			if (strlen(cdata[1]) > 0) strcpy(tname,cdata[1]);
-			if (strlen(cdata[2]) > 0) strcpy(tven,cdata[2]);
-			if(strlen(tmac)<17) {
-				fprintf(fp2," error : mac address bad on line %i\n",linenum);
-				continue;
-			}
-			if (macstr2ll(tmac,&tmacll,&tmaskll,1)) {
-				fprintf(fp2," error : bad mac address format on line %i\n",linenum);
-				continue;
-			}
-//			tipl = ipstr2l(tip);
-			ttname = (char*)malloc(strlen(tname)+4);
-			ttven = (char*)malloc(strlen(tven)+4);
-			strcpy(ttname,tname);
-			strcpy(ttven,tven);
-			compt.Name = ttname;
-			compt.Vendor = ttven;
-			compt.MAC = tmacll;
-			compt.IP = 0;
-			compt.PortNumber = -1;
-			if ((icomp = findmac(tmacll)) == -1 ) {
-				compdb[numcomps] = compt;
-				numcomps++;
-				numnew++;
-			} else {
-				if (strlen(tname) > 0) {
-					free((compdb+icomp)->Name);
-					(compdb+icomp)->Name = compt.Name;
-				} else {
-					free(ttname);
-				}
-				if (strlen(tven) > 0) {
-					free((compdb+icomp)->Vendor);
-					(compdb+icomp)->Vendor = compt.Vendor;
-				} else {
-					free(ttven);
-				}
-//				if (strlen(tip) > 0) (compdb+icomp)->IP = compt.IP;
-				fprintf(fp2," warning : MAC address duplicated. Dup with icomp = %i (\"%s\")\n",icomp,(compdb+icomp)->Name);
-	//				compdb[icomp] = compt;
-			}
-
-//			if ( strlen(line) > 2 ) fprintf(fp2, "dsquery * %s -scope base -attr objectSid %s studentSIDs.txt\n", line, redir);
-//			redir = redir2;
-		}
-		fclose(fp);
-		for (i=0;i<NLABS;i++) free(cdata[i]);
-		if (numcomps>0) {
-			for (i=0;i<numcomps;i++) {
-				printcomp(compdb+i,fp2);
-			}
-		}
-		printf(" %i new MACs found\n",numnew);
-		fclose(fp2);
-	}
-
-
-	if (fourth) {
-		filename = "leases.txt";
-		fp = fopen(filename, "r");
-//10.0.0.11	DESKTOP-SDRAR14.SWAG.local	9/25/2020 4:53:37 PM	DHCP	d017c28ba606		Full Access	N/A	None
-		if (fp == NULL)return(1);
-		printf(" processing %s\n",filename);
-
-		fp2 = fopen("maclist4.txt", "w");
-		if (fp2 == NULL)return(2);
-
-//		int colns[] = {5,1,0};
-		int colns[] = {4,1,0};
-#define NLABS2 3
-		int nlabs = NLABS2;
-		char * cdata[NLABS2];
-		int numnew = 0;
-
-		for (i=0;i<nlabs;i++) cdata[i] = (char*)malloc(LINELEN);
-
-		linenum = 0;
-		while ((read = getline(&line, &len, fp)) != -1) {
-			//	        printf("Retrieved line of length %zu:\n", read);
-			line[read - 1] = '\000';
-			linenum++;
-			fprintf(fp2," line found : \"%s\"\n", line);
-//			if (parsline3(line,nlabs,colns,cdata,(char *)"\t") != 0) continue;
-			if (parsline3(line,nlabs,colns,cdata,(char *)",") != 0) continue;
-			tmac[0] = '\000';
-			tname[0] = '\000';
-			tip[0] = '\000';
-			if (strlen(cdata[0]) > 0) strcpy(tmac,cdata[0]);
-			if (strlen(cdata[1]) > 0) strcpy(tname,cdata[1]);
-			if (strlen(cdata[2]) > 0) strcpy(tip,cdata[2]);
-//			if(strlen(tmac)<17) {
-			if(strlen(tmac)<12) {
-				fprintf(fp2," error : mac address bad on line %i\n",linenum);
-				continue;
-			}
-			if (macstr2ll(tmac,&tmacll,&tmaskll,3)) {
-				fprintf(fp2," error : bad mac address format on line %i\n",linenum);
-				continue;
-			}
-			tipl = ipstr2l(tip);
-			ttname = (char*)malloc(strlen(tname)+4);
-			strcpy(ttname,tname);
-			compt.Name = ttname;
-			compt.MAC = tmacll;
-			compt.IP = tipl;
-			compt.PortNumber = -1;
-			if ((icomp = findmac(tmacll)) == -1 ) {
-				compdb[numcomps] = compt;
-				numcomps++;
-				numnew++;
-			} else {
-				if (strlen(tname) > 0) {
-					free((compdb+icomp)->Name);
-					(compdb+icomp)->Name = compt.Name;
-				} else {
-					free(ttname);
-				}
-				if (strlen(tip) > 0) (compdb+icomp)->IP = compt.IP;
-				fprintf(fp2," warning : MAC address duplicated. Dup with icomp = %i (\"%s\")\n",icomp,(compdb+icomp)->Name);
-	//				compdb[icomp] = compt;
-			}
-
-//			if ( strlen(line) > 2 ) fprintf(fp2, "dsquery * %s -scope base -attr objectSid %s studentSIDs.txt\n", line, redir);
-//			redir = redir2;
-		}
-		fclose(fp);
-		for (i=0;i<nlabs;i++) free(cdata[i]);
-		if (numcomps>0) {
-			for (i=0;i<numcomps;i++) {
-				printcomp(compdb+i,fp2);
-			}
-		}
-		printf(" %i new MACs found\n",numnew);
-		fclose(fp2);
-	}
-
-	if (fifth) {
-// load oui database
-		filename = "oui.txt";
-		fp = fopen(filename, "r");
-//00:00:01	Xerox	Xerox Corporation
-		if (fp == NULL)return(1);
-		printf(" processing %s\n",filename);
-
-		fp2 = fopen("ouilist.txt", "w");
-		if (fp2 == NULL)return(2);
-
-		int colns[] = {0,1,2};
-#define NLABS3 3
-		int nlabs = NLABS3;
-		char * cdata[NLABS3];
-
-		for (i=0;i<nlabs;i++) cdata[i] = (char*)malloc(LINELEN);
-
-		linenum = 0;
-		while ((read = getline(&line, &len, fp)) != -1) {
-			//	        printf("Retrieved line of length %zu:\n", read);
-			line[read - 1] = '\000';
-			linenum++;
-			fprintf(fp2," line found : \"%s\"\n", line);
-			if (line[0] == '#' ) continue;
-			if (parsline3(line,nlabs,colns,cdata,(char *)"\t") != 0) continue;
-			tmac[0] = '\000';
-			tname[0] = '\000';
-			tven[0] = '\000';
-			if (strlen(cdata[0]) > 0) strcpy(tmac,cdata[0]);
-			if (strlen(cdata[1]) > 0) strcpy(tname,cdata[1]);
-			if (strlen(cdata[2]) > 0) strcpy(tven,cdata[2]);
-			if(strlen(tmac)<8) {
-				fprintf(fp2," error : mac address bad on line %i\n",linenum);
-				continue;
-			}
-			if (macstr2ll(tmac,&tmacll,&tmaskll,1)) {
-				fprintf(fp2," error : bad mac address format on line %i\n",linenum);
-				continue;
-			}
-			ttname = (char*)malloc(strlen(tname)+4);
-			ttven = (char*)malloc(strlen(tven)+4);
-			strcpy(ttname,tname);
-			strcpy(ttven,tven);
-			oui.ShortName = ttname;
-			oui.LongName = ttven;
-			oui.MAC = tmacll;
-			oui.Mask = tmaskll;
-			ouidb[numoui] = oui;
-			numoui++;
-			if (numoui > NUMOUI) {
-				printf("too many oui entries!\n");
-				return(4);
-			}
-		}
-		fclose(fp);
-		for (i=0;i<nlabs;i++) free(cdata[i]);
-		if (numoui>0) {
-			for (i=0;i<numoui;i++) {
-				printoui(ouidb+i,fp2);
-			}
-		}
-		printf(" %i OUIs found\n",numoui);
-		fclose(fp2);
-	}
-
-// loop through all computers and fill in all missing vendor names
-	int numfound = 0;
-	int ifound;
-	char bogus[] = "bogus";
-	if (numcomps>0) {
-		for (i=0;i<numcomps;i++) {
-			if ( (compdb+i)->Vendor == NULL) {
-				tven[0] = '\000';
-				if ( (ifound = findvendor((compdb+i)->MAC,tven)) < 0 ) {
-					ttven = (char*)malloc(strlen(bogus)+4);
-					strcpy(ttven,bogus);
-					(compdb+i)->Vendor = ttven;
-					numfound++;
-					continue;
-				}
-				if (strlen(tven)>0) {
-					ttven = (char*)malloc(strlen(tven)+4);
-					strcpy(ttven,tven);
-					(compdb+i)->Vendor = ttven;
-					numfound++;
-				}
-			}
-			if ( strlen((compdb+i)->Vendor) == 0) {
-				free((compdb+i)->Vendor);
-				tven[0] = '\000';
-				if ( (ifound = findvendor((compdb+i)->MAC,tven)) < 0 ) {
-					ttven = (char*)malloc(strlen(bogus)+4);
-					strcpy(ttven,bogus);
-					(compdb+i)->Vendor = ttven;
-					numfound++;
-					continue;
-				}
-				if (strlen(tven)>0) {
-					ttven = (char*)malloc(strlen(tven)+4);
-					strcpy(ttven,tven);
-					(compdb+i)->Vendor = ttven;
-					numfound++;
-					continue;
-				}
-			}
-		}
-	}
-	printf(" %i more vendors identified\n",numfound);
-
-
-
-	if (sixth) {
-		filename = switchfile;
-		fp = fopen(filename, "r");
-//00-12-3F-B3-66-DC	1	20	Dynamic	Aging
-		if (fp == NULL)return(1);
-		printf(" processing %s\n",filename);
-
-		fp2 = fopen("portlist.txt", "w");
-		if (fp2 == NULL)return(2);
-
-		linenum = 0;
-		while ((read = getline(&line, &len, fp)) != -1) {
-			//	        printf("Retrieved line of length %zu:\n", read);
-			line[read - 1] = '\000';
-			linenum++;
-			fprintf(fp2," line found : \"%s\"\n", line);
-			if (parsline2(line,tmac,tport) != 0) continue;
-			if(strlen(tmac)<17) {
-				fprintf(fp2," error : mac address bad on line %i\n",linenum);
-				continue;
-			}
-			if (macstr2ll(tmac,&tmacll,&tmaskll,2)) {
-				fprintf(fp2," error : bad mac address format on line %i\n",linenum);
-				continue;
-			}
-			if (portstr2int(tport,&port)) {
-				fprintf(fp2," error : bad port format on line %i\n",linenum);
-				continue;
-			}
-			if ((icomp = findmac(tmacll)) == -1 ) {
-				tven[0] = '\000';
-				if ( findvendor(tmacll,tven) < 0 ) {
-					fprintf(fp2," warning : MAC address connected to port %i at line %i not in database. It's vendor is bogus\n",port,linenum);
-				} else {
-					fprintf(fp2," warning : MAC address connected to port %i at line %i not in database. It's vendor is %s\n",port,linenum,tven);
-				}
-			} else {
-				if ( compdb[icomp].PortNumber > 0 ) {
-					fprintf(fp2," warning : MAC address found at multiple ports (%i at line %i, %i in database).\n",port,linenum,compdb[icomp].PortNumber);
-				}
-				compdb[icomp].PortNumber = port;
-			}
-		}
-		fclose(fp);
-		if (numcomps>0) {
-			for (i=0;i<NUMPORTS;i++) {
-				for (int j=0;j<numcomps;j++) {
-					if ( compdb[j].PortNumber == i ) printcomp(compdb+j,fp2);
-				}
-			}
-		}
-		fclose(fp2);
-	}
 
 	macdoc = xmlNewDoc(BAD_CAST "1.0");
 	macroot = xmlNewNode(NULL, BAD_CAST "nmaprun");
@@ -1011,7 +1136,7 @@ void parseScan (xmlDocPtr doc, xmlNodePtr cur, int *numnew, FILE *fp2) {
 
 int parsline3(char *line,int nlabs,int *colns,char **cdata,char * delims) {
 //	ica-2007	IntelCor	00:21:6b:eb:c1:2a	-	User	6.75 GB	309 MB	07/30/2020 6:12 pm	09/07/2020 10:15 am
-// all fields are separated by tabs
+// all fields are separated by delimiters specified by delims
 // nlabs is the number of fields to process
 // colns[] is an array of integer field indecies
 // cdata[] is the return array of character strings (each max lenght LINELEN) of parsed output
