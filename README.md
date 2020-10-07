@@ -3,9 +3,9 @@ Network activity monitor
 
 Collects various information available form the local area network.
 
-Input is obtained from opsi, the dhcp server, local area network scanning (nmap), the namaged switches, and the UniFi WiFi control server. In addition, the oui.txt file vailable from https://gitlab.com/wireshark/wireshark/-/raw/master/manuf is used.
+Input is obtained from opsi, the dhcp server, local area network scanning (nmap), the managed switches, and the UniFi WiFi control server. In addition, the oui.txt file vailable from https://gitlab.com/wireshark/wireshark/-/raw/master/manuf is used.
 
-The program assembles a list of all MACs seen on the local network and incorporates the results into a xml format master file maintanined by the program. The data saved includes MAC, hostname (if available), vendor, last known ip address.
+The program assembles a list of all MACs seen on the local network and incorporates the results into a xml format master file maintained by the program. The data saved includes MAC, hostname (if available), vendor, last known ip address.
 
 The master xml file format is based on the xml format used by nmap. A short example follows:
 
@@ -38,8 +38,8 @@ The input file is expected to be on MACdata.xml. When the program terminates, an
 
 The program takes three run time optional arguments:
 The first argument is the location of the "config" file. This file contains a list of all of the input files to be processed as well as their respective output (listing) files. The format of the config file is listed below.
-The second argument is primarily used for program debug/checkout. It controlls which section of the code (which input file) is to be run. If set to "all", then all of the input files will be read.
-The third argument specifies the name of the file containing switch information. This argument is ignored if a switchfile is specified in the config file. By succesively running the program against each switch on the network and examining the portlist.txt output file, it's posible to guess the relative configuration of the network.
+The second argument is primarily used for program debug/checkout. It controls which section of the code (which input file) is to be run. If set to "all", then all of the input files will be read. It can be used to mask the processing options specified in the config file.
+The third argument specifies the name of the file containing switch information. This argument is ignored if a switch file is specified in the config file. By successively running the program against each switch on the network and examining the portlist.txt output file, it's possible to guess the relative configuration of the network.
 
 The "config" file looks similar to this:
 
@@ -48,20 +48,24 @@ The "config" file looks similar to this:
 3,unifimac.txt,maclist3.txt,0
 4,leases.txt,maclist4.txt,0
 5,oui.txt,ouilist.txt,0
+7,MyUserName,MyPassword,0
+8,10.0.0.2,T2600G-28TS-SEP24.txt,1
 6,T2600G-28TS-SEP24.txt,portlist-T2600G-28TS-SEP24.txt,0
 
-Each line specifies a file to be processed. The first field on the line is the file type. the file types are as follows:
-1 -> opsi data
-2 -> local network scan
-3 -> UniFi WiFi data
-4 -> dhcp lease data
-5 -> OUI database file
-6 -> switch data file
-The second field is the name of the input file. The third field is the name to use for the output file. The fourth field is not currently used. However, it needs to be present. It is intended to be used to specify additional format information.
-Note that the lines in the config file are processed in the order that they are read. So, if you intend to process switch data using your latest updates to the MAC database, you should include all type 6 lines at the end of the file (after your latest MAC updates).
+Each line specifies a file to be processed or an option to run. The first field on the line is the option type. the types are as follows:
+1 -> process opsi data file
+2 -> process local network scan file
+3 -> process UniFi WiFi data file
+4 -> process dhcp lease data file
+5 -> process OUI database file
+6 -> process switch data file
+7 -> specify username/password data
+8 -> connect to switch via telnet and create switch data file
+For type 1-6, the second field is the name of the input file. For type 7 it is the username. For type 8 it is the host name or ip address. The third field is the name to use for the output file (except for type 7 where it is the password). The fourth field is not used with all formats. However, it must be present. It is intended to be used to specify additional format information.
+Note that the lines in the config file are processed in the order that they are read. I.e., if you intend to process switch data using your latest updates to the MAC database, you should include all type 6 lines after the lines performing your MAC updates.
 
 
-The portlist output file is produced when processing type 6 input. The default file name is portlist.txt. The output file looks something lke this:
+The portlist output file is produced when processing type 6 input. The default file name is portlist.txt. The output file looks something like this:
 
  line found : "T2600G-28TS(config)#show mac address-table vlan 1"
  line found : ""
@@ -109,9 +113,9 @@ Port 5
 Port 5
 
 
-The initial section is an echo of the (switch) input file with some diagnostic messages. The bottom section is a sorted list (by swich port number) of all of the machines that the switch has recently seen. The input file includes the switch's MAC cache.
+The initial section is an echo of the (switch) input file with some diagnostic messages. The bottom section is a sorted list (by switch port number) of all of the machines that the switch has recently seen. The input file includes the switch's MAC cache.
 
-The type 1 input is opsi data. The default opsi input file name is opsiMACs.csv. It is created using configed: First, show all clients and make sure that "Show OPSI MAC address" is selected in the clients pane. Select all of the data in the clients pane and copy it to your clipboard (use <ctrl>Ins). Next open your speadsheet program and paste the clipboard data into a blank worksheet. Finally, save the data in .csv format. If the data is coming form Windows, you'll likely need to convert it to 8 bit ascii. (use dos2uni). The final file should look something like the following:
+The type 1 input is opsi data. The default opsi input file name is opsiMACs.csv. It is created using opsi-configed: First, show all clients and make sure that "Show OPSI MAC address" is selected in the clients pane. Select all of the data in the clients pane and copy it to your clipboard (use <ctrl>Ins). Next open your speadsheet program and paste the clipboard data into a blank worksheet. Finally, save the data in .csv format. If the data is coming form Windows, you'll likely need to convert it to 8 bit ascii. (use dos2uni). The final file should look something like the following:
 
 "andrew.swag.local","student tablet (RCA)",,"2020-03-17 14:45:47","10.0.0.111","0c:9a:42:18:3f:6c"
 "bethlehem.swag.local","student tablet",,"2020-09-02 11:03:52","10.0.0.151","88:12:4e:0f:3d:3c"
@@ -126,7 +130,7 @@ The type 1 input is opsi data. The default opsi input file name is opsiMACs.csv.
 The default input file name for type 2 input (local network scan data) is scan2X.txt. It should be in standard nmap xml output format. For example, it can be generated as so: sudo nmap -sn -oX scan2X.txt 10.0.0.0/23
 
 
-The default input file name for type 3 input (UniFi WiFi mac data) is unifimac.txt. It is generated using the UniFi controler web app. Open the controller and select the "Insights" tab. Use your mouse to select all of the data displayed in the main pane and copy to your clipboard. Paste the data into a text editor. The file will look something like this:
+The default input file name for type 3 input (UniFi WiFi mac data) is unifimac.txt. It is generated using the UniFi controller web app. Open the controller and select the "Insights" tab. Use your mouse to select all of the data displayed in the main pane and copy to your clipboard. Paste the data into a text editor. The file will look something like this:
 
 
 	Name	Manufacturer	Mac	Fixed IP	User/Guest	Down	Up	First Seen	Last Seen	
@@ -183,7 +187,7 @@ The main body of the file will look something like this:
 .
 
 
-The default input file name for type 6 input (switch data) is 24portMACs.txt. However, this file name can also be specified as a run time argument to the program. The format of this file is based on the ouput produced by T-Link managed switches (which varies somewhat between models). A sample follows:
+The default input file name for type 6 input (switch data) is 24portMACs.txt. However, this file name can also be specified as a run time argument to the program. The format of this file is based on the output produced by T-Link managed switches (which varies somewhat between models). A sample follows:
 
 
 00-12-3F-B3-66-DC	1	20	Dynamic	Aging
@@ -197,7 +201,14 @@ The default input file name for type 6 input (switch data) is 24portMACs.txt. Ho
 .
 
 
-The program starts by looking for old MAC data on the MACdata.xml file. It then reads each of the files mentioned above looking for MACs that are not yet in its database. Finally, it reads the switch data and matches each of the MACs in the switch's cache with the data in the database and outputs all known data for each computer seen by the switch (sorted by switch port number). Before exiting, the program copies all data in its MAC database to MACdataOut.xml.
+The type 7 input option is used to set the username and password data sent when connecting to a switch via telnet (type 8). The "input file" field is used for the username and the "output file" field is used to specify the password. The default username and password are blank. If you are connecting to multiple switches with different passwords, each type 8 option should be proceeded with a new type 7. If all of your switches share the same username/password, then this option only needs to be specified once (before the first type 8 config line).
+
+
+The type 8 input option is used to connect to switches via telnet to download switch information. The "input file" field specifies the ip address or hostname of the switch to be contacted. The "output file" field specifies where the switch data is to be saved. The format of the output file will be compatible with the input file used for type 6 switch processing. Thus, to process up-to-date switch information, you would first download fresh switch information to a local file using the type 8 option and follow it with a type 6 option that processes the file created by the type 8 option. Presently, the only switches supported by this option are the T-Link managed switches. It has been tested with TL-SG2424, TL-SG2216, and T2600G-28TS switches. It recognizes two flavors of T-Link commands and the format option field is used to specify which format is expected. The format option should be set to 0 for TL-SG2424 and TL-SG2216 switches and set to 1 for T2600G-28TS switches. The sequence of commands used by format 0 are : {"username","password","\r","enable","configure","show mac address-table address all","exit","exit","exit"}. While the sequence of commands used by format 1 are : {"username","password","enable","configure","show mac address-table vlan 1","exit","exit","exit"}
+
+
+General processing of the program:
+The program starts by looking for old MAC data on the MACdata.xml file. It then reads each line of the config file and processes options mentioned above. Options 1-4 look for MACs that are not yet in its database. Option 5 loads the oui database used to identify vendors. Option 6 reads switch data and matches each of the MACs in the switch's cache with the data in the database and outputs all known data for each computer seen by the switch (sorted by switch port number). Before exiting, the program copies all data in its MAC database to MACdataOut.xml. A typical order of options in the config file would be 7,8,1,2,3,4,5,6.
 
 
 
