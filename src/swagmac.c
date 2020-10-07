@@ -33,6 +33,8 @@
 #include "zlib.h"
 #endif
 #include "libtelnet.h"
+#include <bson.h>
+#include <mongoc.h>
 
 
 #ifdef WINDOZE
@@ -121,6 +123,7 @@ static void _input(char *buffer, int size);
 static void _send(int sock, const char *buffer, size_t size);
 static void _event_handler(telnet_t *telnet, telnet_event_t *ev,void *user_data);
 int getswitchfile(char *hostname, char *portname);
+int processUniFiEventData ();
 
 
 
@@ -139,6 +142,7 @@ int echo2stdout = 0;
 int hangitup = 0;
 #define NUMSTR	9
 #define NUMFMTS	2
+int mongoInitCalled = 0;
 
 
 int main(int argc, char* argv[])
@@ -153,6 +157,9 @@ int main(int argc, char* argv[])
 	int fourth = 0;
 	int fifth = 0;
 	int sixth = 0;
+	int seventh = 0;
+	int eighth = 0;
+	int ninth = 0;
 	char *filename;
 	char *outfilename;
 	char *switchfile;
@@ -187,6 +194,9 @@ int main(int argc, char* argv[])
 		if ((strcmp(argv[2], "all") == 0) | (strcmp(argv[2], "fourth") == 0)) fourth = 1;
 		if ((strcmp(argv[2], "all") == 0) | (strcmp(argv[2], "fifth") == 0)) fifth = 1;
 		if ((strcmp(argv[2], "all") == 0) | (strcmp(argv[2], "sixth") == 0)) sixth = 1;
+		if ((strcmp(argv[2], "all") == 0) | (strcmp(argv[2], "seventh") == 0)) seventh = 1;
+		if ((strcmp(argv[2], "all") == 0) | (strcmp(argv[2], "eighth") == 0)) eighth = 1;
+		if ((strcmp(argv[2], "all") == 0) | (strcmp(argv[2], "ninth") == 0)) ninth = 1;
 	}
 	else {
 		first = 1;
@@ -195,6 +205,9 @@ int main(int argc, char* argv[])
 		fourth = 1;
 		fifth = 1;
 		sixth = 1;
+		seventh = 1;
+		eighth = 1;
+		ninth = 1;
 	}
 	switchfile = "24portMACs.txt";
 	if (argc > 3)  switchfile = argv[3] ;
@@ -795,15 +808,15 @@ int main(int argc, char* argv[])
 				break;
 
 		    case 7:
-		    {
+		    if (seventh) {
 		    	printf(" processing username %s\n",filename);
 		    	strcpy(username,filename);
 		    	strcpy(password,outfilename);
-		    	break;
 		    }
+		    break;
 
 		    case 8:
-		    {
+		    if (eighth) {
 		    	printf(" processing %s\n",filename);
 		    	fp2 = fopen(outfilename, "w");
 		    	if (fp2 == NULL)return(2);
@@ -811,8 +824,17 @@ int main(int argc, char* argv[])
 		    		if ( !hangitup ) fprintf(stderr," telnet connection failed\n");
 		    	}
 		    	fclose(fp2);
-		    	break;
 		    }
+	    	break;
+
+		    case 9:
+		    if (ninth) {
+		    	printf(" processing UniFi Event data\n");
+		    	if ( processUniFiEventData () ){
+		    		fprintf(stderr," UniFi Event processing failed\n");
+		    	}
+		    }
+	    	break;
 
 		    default:
 		    	break;
@@ -853,6 +875,7 @@ int main(int argc, char* argv[])
 	}
 	free(compdb);
 	free(ouidb);
+	if ( mongoInitCalled ) mongoc_cleanup();
 	if (second) puts("!!!Done!!");
 	return EXIT_SUCCESS;
 }
@@ -1238,7 +1261,7 @@ int parsline3(char *line,int nlabs,int *colns,char **cdata,char * delims) {
 	int i;
 
 	for (i=0;i<nlabs;i++) *(cdata[i]) = '\000';
-	if (strlen(line) < 16 ) return (-1);
+	if (strlen(line) < 4 ) return (-1);
 	templine=strdup(line);
 
 	pch = strsep (&templine,delims);
@@ -1700,5 +1723,108 @@ int getswitchfile(char *hostname, char *portname) {
 	strseq = 0;
 
 	return 0;
+}
+
+int processUniFiEventData ()
+{
+   mongoc_client_t *client;
+   mongoc_collection_t *collection;
+   mongoc_cursor_t *cursor;
+   const bson_t *doc;
+//   bson_t *query;
+   bson_t query2;
+   bson_t gt;
+   bson_iter_t iter;
+   bson_error_t error;
+   const bson_value_t *value;
+   char *str;
+   long int last_time = 0;
+   FILE *fp2;
+
+   fp2 = fopen("last-time.txt", "r");
+   if (fp2 != NULL) {
+	   fscanf(fp2,"%li\n",&last_time);
+	   fclose(fp2);
+   } else {
+	   printf("\t\t The Last Time file does not exist.\n");
+	   return(1);
+   }
+   printf("\t\t Last Time Value is %li\n",last_time);
+
+
+   if ( !mongoInitCalled) {
+	   mongoc_init ();
+	   mongoInitCalled = 1;
+   }
+//   mongoexport --port 27117 --db ace --collection event --type=csv --fields ap,datetime,msg --out event.csv
+
+   if ( (client = mongoc_client_new ("mongodb://localhost:27117/?appname=find-example") ) == NULL ) {
+	   fprintf(stderr," unable to open mongo data base \n");
+	   return 1;
+   }
+   collection = mongoc_client_get_collection (client, "ace", "event");
+   //query = bson_new ();
+   //query = BCON_NEW ("time", BCON_INT64 (1601660741066));
+
+   bson_init (&query2);
+      BSON_APPEND_DOCUMENT_BEGIN (&query2, "time", &gt);
+//      BSON_APPEND_TIMESTAMP (&gt, "$gt", last_time, 0);
+//      BSON_APPEND_INT64 (&gt, "$gt", 1601663814352);
+      BSON_APPEND_INT64 (&gt, "$gt", last_time);
+
+      if ( !bson_append_document_end (&query2, &gt) ) {
+   	   fprintf(stderr," unable to end bson document \n");
+   	   return 2;
+      }
+   // "time" : 1601599947222
+//   BSON_APPEND_UTF8 (query, "time", "1601599947222");
+//      cursor = mongoc_collection_find_with_opts (collection, query, NULL, NULL);
+      cursor = mongoc_collection_find_with_opts (collection, &query2, NULL, NULL);
+
+   while (mongoc_cursor_next (cursor, &doc)) {
+      if ( ( str = bson_as_json (doc, NULL) ) == NULL ) {
+     	   fprintf(stderr," bson_as_json call failed \n");
+     	   return 4;
+      }
+      printf ("%s\n", str);
+      bson_free (str);
+
+      if (bson_iter_init (&iter, doc)) {
+         while (bson_iter_next (&iter)) {
+            printf ("Found element key: \"%s\"\n", bson_iter_key (&iter));
+            if (strcmp(bson_iter_key (&iter),"time") == 0 ) {
+            	value = bson_iter_value (&iter);
+            	if (value->value_type == BSON_TYPE_INT64) {
+            		printf ("\tFound time value: \"%li\"\n", bson_iter_int64 (&iter));
+            		last_time = bson_iter_int64 (&iter);
+            	}
+            }
+         }
+      } else {
+   	   fprintf(stderr," bson_iter_init call failed \n");
+   	   return 5;
+      }
+
+   }
+   if ( mongoc_cursor_error (cursor, &error) ) {
+	   fprintf(stderr," mongo cursor read routing returned error : \"%s\"\n",error.message);
+	   return 3;
+   }
+
+//   bson_destroy (query);
+   bson_destroy (&query2);
+   mongoc_cursor_destroy (cursor);
+   mongoc_collection_destroy (collection);
+   mongoc_client_destroy (client);
+//   mongoc_cleanup ();  // note : must be called only once - moved to end of main program
+   if ( last_time) {
+	   printf("\t\t Last Time Value is %li\n",last_time);
+	   fp2 = fopen("last-time.txt", "w");
+	   if (fp2 == NULL)return(2);
+	   fprintf(fp2,"%li\n",last_time);
+	   fclose(fp2);
+   }
+
+   return 0;
 }
 
