@@ -131,6 +131,14 @@ xmlNodePtr macroot;
 FILE *fp;
 FILE *fp2;
 FILE *fpconf;
+int tosend = 0;
+char tempbuf[100000];
+char sendbuf[1000];
+int strseq = 0;
+int echo2stdout = 0;
+int hangitup = 0;
+#define NUMSTR	9
+#define NUMFMTS	2
 
 
 int main(int argc, char* argv[])
@@ -740,7 +748,7 @@ int main(int argc, char* argv[])
 						linenum++;
 						fprintf(fp2," line found : \"%s\"\n", line);
 						if ( strncmp(line,"Press",5) == 0 ) {
-							fprintf(fp2," \"Press\" found : length = %lu\n", strlen(line));
+//							fprintf(fp2," \"Press\" found : length = %lu\n", strlen(line));
 							memmove (line,line+strlen(line)*2+4,80);
 							fprintf(fp2," line found : \"%s\"\n", line);
 						}
@@ -800,7 +808,7 @@ int main(int argc, char* argv[])
 		    	fp2 = fopen(outfilename, "w");
 		    	if (fp2 == NULL)return(2);
 		    	if ( getswitchfile(filename, (char *)"23") ) {
-		    		fprintf(stderr," telnet connection failed\n");
+		    		if ( !hangitup ) fprintf(stderr," telnet connection failed\n");
 		    	}
 		    	fclose(fp2);
 		    	break;
@@ -1455,60 +1463,30 @@ static void _send(int sock, const char *buffer, size_t size) {
 	}
 }
 
-int tosend = 0;
-char tempbuf[100000];
-char sendbuf[1000];
-int strseq = 0;
-int echo2stdout = 1;
-#define NUMSTR	9
-#define NUMFMTS	2
-
 static void _event_handler(telnet_t *telnet, telnet_event_t *ev,
 		void *user_data) {
 	int sock = *(int*)user_data;
-/*	char logintest[] = "\nfirewall7 login: ";
-	char passwdtest[] = "Password: ";
-	char alldone[] = "~# ";
 
-	char account[] = "root";
-	char password[] = "lrdjesus";
-	char logout[] = "exit";
-	char *teststr[3];
-	char *sendstr[3];
-
-	teststr[0] = logintest;
-	teststr[1] = passwdtest;
-	teststr[2] = alldone;
-	sendstr[0] = account;
-	sendstr[1] = password;
-	sendstr[2] = logout;
-	*/
-
-//	char teststr[NUMSTR][40]  = {"User:","Password:","\r",">"     ,"#"        ,"#"                                 ,"#"   ,"#"   ,">"};
-//	char sendstr[NUMSTR][40]  = {""     ,""         ,"\r","enable","configure","show mac address-table address all","exit","exit","exit"};
-//	int alttest[NUMSTR]       = {      0,          0,   0,       0,          0,                                   0,     1,     0,     0};
 	char teststr[NUMFMTS][NUMSTR][40]  = 	{
 									{"User:","Password:","\r",">"     ,"#"        ,"#"                                 ,"#"   ,"#"   ,">"},
-								  	{"User:","Password:"     ,">"     ,"#"        ,"#"                                 ,"#"   ,"#"   ,">",">"}
+								  	{"User:","Password:"     ,">"     ,"#"        ,"#"                                 ,"#"   ,"#"   ,">","xyzzx"}
 									};
 	char sendstr[NUMFMTS][NUMSTR][40]  = 	{
 									{""     ,""         ,"\r","enable","configure","show mac address-table address all","exit","exit","exit"},
-									{""     ,""              ,"enable","configure","show mac address-table vlan 1"     ,"exit","exit","exit",""}
+									{""     ,""              ,"enable","configure","show mac address-table vlan 1"     ,"exit","exit","exit","error"}
 									};
 	int alttest[NUMFMTS][NUMSTR]       = 	{
-									{      0,          0,   0,       0,          0,                                   0,     1,     0,     0},
-									{	   0,          0,            0,          0,                                   0,     1,     0,     0,0}
+									{      0,          0,   1,       0,          0,                                   0,     1,     0,     0},
+									{	   0,          0,            1,          0,                                   0,     1,     0,     0,0}
 									};
 	char altstr[NUMFMTS][NUMSTR][40]  = 	{
-									{""     ,""         ,""  ,""      ,""         ,""                                  ,")"   ,""    ,""},
-									{""     ,""              ,""      ,""         ,""                                  ,")"   ,""    ,""    ,""}
+									{""     ,""         ,"User:"  ,""      ,""         ,""                                  ,")"   ,""    ,""},
+									{""     ,""              ,"User:"      ,""         ,""                                  ,")"   ,""    ,""    ,""}
 									};
 	char altsend[NUMFMTS][NUMSTR][40]  = 	{
 									{""     ,""         ,""  ,""      ,""         ,""                                  ," "   ,""    ,""},
 									{""     ,""              ,""      ,""         ,""                                  ," "   ,""    ,""    ,""}
 									};
-//	char *altstr = ")";
-//	char *altsend = " ";
 
 
 	switch (ev->type) {
@@ -1516,48 +1494,48 @@ static void _event_handler(telnet_t *telnet, telnet_event_t *ev,
 	case TELNET_EV_DATA:
 		if ( echo2stdout ) {
 			if (ev->data.size && fwrite(ev->data.buffer, 1, ev->data.size, stdout) != ev->data.size) {
-              		fprintf(stderr, "ERROR: Could not write complete buffer to stdout");
+              		fprintf(stderr, "ERROR: Could not write complete buffer to stdout\n");
 			}
 		}
 		if ( ( (fmtType == 0) && (strseq == 6) ) || ( (fmtType == 1) && (strseq == 5) ) ) {
+//		if ( 1 ) {
 			if (ev->data.size && fwrite(ev->data.buffer, 1, ev->data.size, fp2) != ev->data.size) {
-			     fprintf(stderr, "ERROR: Could not write complete buffer to stdout");
+			     fprintf(stderr, "ERROR: Could not write complete buffer to output file\n");
 			}
 		}
-		//printf(" read %i characters\r\n",ev->data.size);
 		strncpy(tempbuf,ev->data.buffer,ev->data.size);
 		tempbuf[ev->data.size] = '\000';
-//		if ( strseq > 1 ) {
-			if (ev->data.size > 0 ) {
-				int itst;
-				itst = strlen(tempbuf) - strlen(teststr[fmtType][strseq]);
-				if (strncmp(tempbuf+itst,teststr[fmtType][strseq],strlen(teststr[fmtType][strseq])) == 0 ) {
-					printf(" ////////////  \"%s\" FOUND !!! ///////////\r\n",teststr[fmtType][strseq]);
-					strcpy(sendbuf,sendstr[fmtType][strseq]);
-					if(strseq == 0)strcpy(sendbuf,username);
-					if(strseq == 1)strcpy(sendbuf,password);
-					strseq++;
-					if (strseq == NUMSTR ) strseq = NUMSTR -1;
+		if (ev->data.size > 0 ) {
+			int itst;
+			itst = strlen(tempbuf) - strlen(teststr[fmtType][strseq]);
+			int itst2;
+			itst2 = strlen(tempbuf) - strlen(altstr[fmtType][strseq]);
+			if (strncmp(tempbuf+itst,teststr[fmtType][strseq],strlen(teststr[fmtType][strseq])) == 0 ) {
+//				printf(" ////////////  \"%s\" FOUND !!! ///////////\r\n",teststr[fmtType][strseq]);
+				strcpy(sendbuf,sendstr[fmtType][strseq]);
+				if(strseq == 0)strcpy(sendbuf,username);
+				if(strseq == 1)strcpy(sendbuf,password);
+				if ( ( (fmtType == 0) &&  (strseq < NUMSTR) ) || ( (fmtType == 1) &&  (strseq < (NUMSTR-1)) ) ) {
 					tosend = 1;
-				} else if ( ( alttest[fmtType][strseq] == 1 ) && ( strncmp(tempbuf+itst,altstr[fmtType][strseq],1) == 0 ) ) {
-					printf(" ////////////  \"%s\" FOUND !!! ///////////\r\n",altstr[fmtType][strseq]);
-					strcpy(sendbuf,altsend[fmtType][strseq]);
-					//strseq++;
-					//if (strseq == NUMSTR ) strseq = NUMSTR -1;
-					tosend = 1;
-				} else {
-					printf(" found \"%s\"",tempbuf+itst);
 				}
-			}
-/*		} else {
-			if (strncmp(tempbuf,teststr[strseq],strlen(teststr[strseq])) == 0 ) {
-				printf(" ////////////  \"%s\" FOUND !!! ///////////\r\n",teststr[strseq]);
-				strcpy(tempbuf,sendstr[strseq]);
+				if (strseq > (NUMSTR-2)) {
+					hangitup = 1;
+				}
 				strseq++;
+				if (strseq == NUMSTR ) strseq = NUMSTR -1;
+			} else if ( ( alttest[fmtType][strseq] == 1 ) && ( strncmp(tempbuf+itst2,altstr[fmtType][strseq],strlen(altstr[fmtType][strseq])) == 0 ) ) {
+//				printf(" //////////// alt \"%s\" FOUND !!! ///////////\r\n",altstr[fmtType][strseq]);
+				strcpy(sendbuf,altsend[fmtType][strseq]);
+				if (strseq == 2 ){
+					strcpy(sendbuf,username);
+					strseq = 1;
+					fprintf(stderr," ////////////  LOGIN FAILED !!! ///////////\r\n");
+				}
 				tosend = 1;
+			} else {
+//				printf(" found \"%s\"",tempbuf+itst);
 			}
-		} */
-		//printf(" data = \"%s\"\r\n",tempbuf);
+		}
 		fflush(stdout);
 		break;
 	/* data must be sent */
@@ -1671,7 +1649,7 @@ int getswitchfile(char *hostname, char *portname) {
 //	char tbuffer[10000];
 
 	/* loop while both connections are open */
-	while (poll(pfd, 2, -1) != -1) {
+	while (poll(pfd, 2, 10000) != -1) {
 		/* read from stdin */
 		if (pfd[0].revents & (POLLIN | POLLERR | POLLHUP)) {
 			if ((rs = read(STDIN_FILENO, buffer, sizeof(buffer))) > 0) {
@@ -1679,7 +1657,7 @@ int getswitchfile(char *hostname, char *portname) {
 			} else if (rs == 0) {
 				break;
 			} else {
-				fprintf(stderr, "recv(server) failed: %s\n",
+				fprintf(stderr, " recv(server) failed: %s\n",
 						strerror(errno));
 				telnet_free(telnet);
 				close(sock);
@@ -1703,8 +1681,9 @@ int getswitchfile(char *hostname, char *portname) {
 			} else if (rs == 0) {
 				break;
 			} else {
-				fprintf(stderr, "recv(client) failed: %s\n",
-						strerror(errno));
+				if ( !hangitup ) {  // suppress error 104 after termination of connection to T2600G-28TS switch
+					fprintf(stderr, " recv(client) failed with error %i : %s\r\n",errno,strerror(errno));
+				}
 				telnet_free(telnet);
 				close(sock);
 				_cleanup();
