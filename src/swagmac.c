@@ -1740,6 +1740,20 @@ int processUniFiEventData ()
    char *str;
    long int last_time = 0;
    FILE *fp2;
+   uint32_t strlength;
+   unsigned short int usertype = 0;
+   unsigned short int keytype = 0;
+   long int duration;
+   char username[LINELEN];
+   char apname1[LINELEN];
+   char apname2[LINELEN];
+   char ssid[LINELEN];
+   char timetag[LINELEN];
+   char * tempstr;
+   unsigned short int dbgprnt = 0;
+   time_t  datetime;
+   unsigned long long tmacll;
+   unsigned long long tmaskll;
 
    fp2 = fopen("last-time.txt", "r");
    if (fp2 != NULL) {
@@ -1765,17 +1779,19 @@ int processUniFiEventData ()
    collection = mongoc_client_get_collection (client, "ace", "event");
    //query = bson_new ();
    //query = BCON_NEW ("time", BCON_INT64 (1601660741066));
-
+for (int jk = 0;jk<600;jk++) {
    bson_init (&query2);
       BSON_APPEND_DOCUMENT_BEGIN (&query2, "time", &gt);
 //      BSON_APPEND_TIMESTAMP (&gt, "$gt", last_time, 0);
 //      BSON_APPEND_INT64 (&gt, "$gt", 1601663814352);
+//      last_time = 1602110404797;
       BSON_APPEND_INT64 (&gt, "$gt", last_time);
 
       if ( !bson_append_document_end (&query2, &gt) ) {
    	   fprintf(stderr," unable to end bson document \n");
    	   return 2;
       }
+
    // "time" : 1601599947222
 //   BSON_APPEND_UTF8 (query, "time", "1601599947222");
 //      cursor = mongoc_collection_find_with_opts (collection, query, NULL, NULL);
@@ -1786,19 +1802,298 @@ int processUniFiEventData ()
      	   fprintf(stderr," bson_as_json call failed \n");
      	   return 4;
       }
-      printf ("%s\n", str);
+      if (dbgprnt>2) printf ("%s\n", str);
       bson_free (str);
 
       if (bson_iter_init (&iter, doc)) {
-         while (bson_iter_next (&iter)) {
-            printf ("Found element key: \"%s\"\n", bson_iter_key (&iter));
+		usertype = 0;
+		keytype = 0;
+		duration = 0;
+		datetime = 0;
+		username[0] = '\000';
+		apname1[0] = '\000';
+		apname2[0] = '\000';
+		timetag[0] = '\000';
+		ssid[0] = '\000';
+		while (bson_iter_next (&iter)) {
+			if (dbgprnt>2) printf ("Found element key: \"%s\"\n", bson_iter_key (&iter));
+            if (strcmp(bson_iter_key (&iter),"key") == 0 ) {
+            	value = bson_iter_value (&iter);  // bson_iter_type
+            	//printf ("\tFound msg value->value_type: %u\n",value->value_type);
+            	if (value->value_type == BSON_TYPE_UTF8) {
+            		if (dbgprnt) printf ("\tFound key value: \"%s\"\n", bson_iter_utf8 (&iter,&strlength));
+            		if (dbgprnt) printf ("\tlength = %u\n",strlength);
+            		if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_WU_Connected") == 0 ) {
+            			keytype = 1;
+            		} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_WU_Disconnected") == 0 ) {
+            			keytype = 2;
+            		} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_WU_RoamRadio") == 0 ) {
+            			keytype = 3;
+            		} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_WU_Roam") == 0 ) {
+            			keytype = 4;
+            		} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_WG_Connected") == 0 ) {
+						keytype = 5;
+					} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_WG_Disconnected") == 0 ) {
+						keytype = 6;
+					} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_WG_RoamRadio") == 0 ) {
+						keytype = 7;
+					} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_WG_Roam") == 0 ) {
+						keytype = 8;
+					} else {
+						if (dbgprnt) printf ( "unwanted keytype %s found\n",bson_iter_utf8 (&iter,&strlength));
+            		}
+            		if (dbgprnt) printf (" keytype set to %u\n",keytype);
+            	} else {
+            		printf ( "ignoring badly formatted key iter");
+            	}
+            }
             if (strcmp(bson_iter_key (&iter),"time") == 0 ) {
             	value = bson_iter_value (&iter);
             	if (value->value_type == BSON_TYPE_INT64) {
-            		printf ("\tFound time value: \"%li\"\n", bson_iter_int64 (&iter));
+            		if (dbgprnt) printf ("\tFound time value: \"%li\"\n", bson_iter_int64 (&iter));
             		last_time = bson_iter_int64 (&iter);
+            	}else {
+            		printf ( "ignoring badly formatted time iter");
             	}
             }
+            if (strcmp(bson_iter_key (&iter),"duration") == 0 ) {
+            	value = bson_iter_value (&iter);
+            	if (dbgprnt) printf ("\tFound duration value->value_type: %u\n",value->value_type);
+            	if (value->value_type == BSON_TYPE_INT64) {
+            		if (dbgprnt) printf ("\tFound duration value: \"%li\"\n", bson_iter_int64 (&iter));
+            		duration = bson_iter_int64 (&iter);
+            	}else {
+            		printf ( "ignoring badly formatted duration iter");
+            	}
+            }
+            if (strcmp(bson_iter_key (&iter),"ap") == 0 ) {
+            	value = bson_iter_value (&iter);  // bson_iter_type
+            	//printf ("\tFound msg value->value_type: %u\n",value->value_type);
+            	if (value->value_type == BSON_TYPE_UTF8) {
+            		tempstr = (char *)bson_iter_utf8 (&iter,&strlength);
+            		if (dbgprnt) printf ("\tFound ap value: \"%s\"\n", tempstr);
+            		if (dbgprnt) printf ("\tlength = %u\n",strlength);
+            		strncpy(apname1,tempstr,strlength);
+            		apname1[strlength] = '\000';
+					if (macstr2ll(apname1,&tmacll,&tmaskll,2)) {
+						fprintf(fp2," error : bad mac address format in UniFi database\n");
+						continue;
+					}
+					int icomp;
+
+					if ((icomp = findmac(tmacll)) > -1 ) {
+						if ( compdb[icomp].Name != NULL ){
+							if ( strlen(compdb[icomp].Name) > 0 ) {
+								strcpy(apname1,compdb[icomp].Name);
+								if ( ( tempstr = strchr(apname1,'.') ) != NULL ) *tempstr = '\000';
+							}
+						}
+					}
+
+
+
+
+            	} else {
+            		printf ( "ignoring badly formatted ap iter");
+            	}
+            }
+            if (strcmp(bson_iter_key (&iter),"ap_from") == 0 ) {
+            	value = bson_iter_value (&iter);  // bson_iter_type
+            	//printf ("\tFound msg value->value_type: %u\n",value->value_type);
+            	if (value->value_type == BSON_TYPE_UTF8) {
+            		tempstr = (char *)bson_iter_utf8 (&iter,&strlength);
+            		if (dbgprnt) printf ("\tFound ap_from value: \"%s\"\n", tempstr);
+            		if (dbgprnt) printf ("\tlength = %u\n",strlength);
+            		strncpy(apname1,tempstr,strlength);
+            		apname1[strlength] = '\000';
+					if (macstr2ll(apname1,&tmacll,&tmaskll,2)) {
+						fprintf(fp2," error : bad mac address format in UniFi database\n");
+						continue;
+					}
+					int icomp;
+
+					if ((icomp = findmac(tmacll)) > -1 ) {
+						if ( compdb[icomp].Name != NULL ){
+							if ( strlen(compdb[icomp].Name) > 0 ) {
+								strcpy(apname1,compdb[icomp].Name);
+								if ( ( tempstr = strchr(apname1,'.') ) != NULL ) *tempstr = '\000';
+							}
+						}
+					}
+            	} else {
+            		printf ( "ignoring badly formatted ap_from iter");
+            	}
+            }
+            if (strcmp(bson_iter_key (&iter),"ap_to") == 0 ) {
+            	value = bson_iter_value (&iter);  // bson_iter_type
+            	//printf ("\tFound msg value->value_type: %u\n",value->value_type);
+            	if (value->value_type == BSON_TYPE_UTF8) {
+            		tempstr = (char *)bson_iter_utf8 (&iter,&strlength);
+            		if (dbgprnt) printf ("\tFound ap_to value: \"%s\"\n", tempstr);
+            		if (dbgprnt) printf ("\tlength = %u\n",strlength);
+            		strncpy(apname2,tempstr,strlength);
+            		apname2[strlength] = '\000';
+					if (macstr2ll(apname2,&tmacll,&tmaskll,2)) {
+						fprintf(fp2," error : bad mac address format in UniFi database\n");
+						continue;
+					}
+					int icomp;
+
+					if ((icomp = findmac(tmacll)) > -1 ) {
+						if ( compdb[icomp].Name != NULL ){
+							if ( strlen(compdb[icomp].Name) > 0 ) {
+								strcpy(apname2,compdb[icomp].Name);
+								if ( ( tempstr = strchr(apname2,'.') ) != NULL ) *tempstr = '\000';
+							}
+						}
+					}
+            	} else {
+            		printf ( "ignoring badly formatted ap_to iter");
+            	}
+            }
+            if (strcmp(bson_iter_key (&iter),"ssid") == 0 ) {
+            	value = bson_iter_value (&iter);  // bson_iter_type
+            	//printf ("\tFound msg value->value_type: %u\n",value->value_type);
+            	if (value->value_type == BSON_TYPE_UTF8) {
+            		tempstr = (char *)bson_iter_utf8 (&iter,&strlength);
+            		if (dbgprnt) printf ("\tFound ssid value: \"%s\"\n", tempstr);
+            		if (dbgprnt) printf ("\tlength = %u\n",strlength);
+            		strncpy(ssid,tempstr,strlength);
+            		ssid[strlength] = '\000';
+            	} else {
+            		printf ( "ignoring badly formatted ssid iter");
+            	}
+            }
+            if (strcmp(bson_iter_key (&iter),"msg") == 0 ) {
+            	value = bson_iter_value (&iter);  // bson_iter_type
+            	//printf ("\tFound msg value->value_type: %u\n",value->value_type);
+            	if (value->value_type == BSON_TYPE_UTF8) {
+            		if (dbgprnt) printf ("\tFound msg value: \"%s\"\n", bson_iter_utf8 (&iter,&strlength));
+//            		printf ("\tFound msg value: \"%s\"\n", bson_iter_utf8 (&iter,&strlength));
+            		if (dbgprnt) printf ("\tlength = %u\n",strlength);
+            	} else {
+            		printf ( "ignoring badly formatted msg iter");
+            	}
+            }
+            if (strcmp(bson_iter_key (&iter),"user") == 0 ) {
+            	value = bson_iter_value (&iter);  // bson_iter_type
+            	//printf ("\tFound msg value->value_type: %u\n",value->value_type);
+            	if (value->value_type == BSON_TYPE_UTF8) {
+            		usertype = 1;
+            		tempstr = (char *)bson_iter_utf8 (&iter,&strlength);
+            		if (dbgprnt) printf ("\tFound user value: \"%s\"\n", tempstr);
+            		if (dbgprnt) printf ("\tlength = %u\n",strlength);
+            		strncpy(username,tempstr,strlength);
+            		username[strlength] = '\000';
+					if (macstr2ll(username,&tmacll,&tmaskll,2)) {
+						fprintf(fp2," error : bad mac address format in UniFi database\n");
+						continue;
+					}
+					int icomp;
+
+					if ((icomp = findmac(tmacll)) > -1 ) {
+						if ( compdb[icomp].Name != NULL ){
+							if ( strlen(compdb[icomp].Name) > 0 ) {
+								strcpy(username,compdb[icomp].Name);
+								if ( ( tempstr = strchr(username,'.') ) != NULL ) *tempstr = '\000';
+							} else {
+								if ( compdb[icomp].Vendor != NULL ){
+									if ( strlen(compdb[icomp].Vendor) > 0 ) {
+										strcat(username,compdb[icomp].Vendor);
+									}
+								}
+							}
+						} else {
+							if ( compdb[icomp].Vendor != NULL ){
+								if ( strlen(compdb[icomp].Vendor) > 0 ) {
+									strcat(username,compdb[icomp].Vendor);
+								}
+							}
+						}
+					}
+            	} else {
+            		printf ( "ignoring badly formatted user iter");
+            	}
+            }
+            if (strcmp(bson_iter_key (&iter),"guest") == 0 ) {
+            	value = bson_iter_value (&iter);  // bson_iter_type
+            	//printf ("\tFound msg value->value_type: %u\n",value->value_type);
+            	if (value->value_type == BSON_TYPE_UTF8) {
+                	usertype = 2;
+            		tempstr = (char *)bson_iter_utf8 (&iter,&strlength);
+            		if (dbgprnt) printf ("\tFound user value: \"%s\"\n", tempstr);
+            		if (dbgprnt) printf ("\tlength = %u\n",strlength);
+            		strncpy(username,tempstr,strlength);
+            		username[strlength] = '\000';
+					if (macstr2ll(username,&tmacll,&tmaskll,2)) {
+						fprintf(fp2," error : bad mac address format in UniFi database\n");
+						continue;
+					}
+					int icomp;
+
+					if ((icomp = findmac(tmacll)) > -1 ) {
+						if ( compdb[icomp].Name != NULL ){
+							if ( strlen(compdb[icomp].Name) > 0 ) {
+								strcpy(username,compdb[icomp].Name);
+								if ( ( tempstr = strchr(username,'.') ) != NULL ) *tempstr = '\000';
+							} else {
+								if ( compdb[icomp].Vendor != NULL ){
+									if ( strlen(compdb[icomp].Vendor) > 0 ) {
+										strcat(username,compdb[icomp].Vendor);
+									}
+								}
+							}
+						} else {
+							if ( compdb[icomp].Vendor != NULL ){
+								if ( strlen(compdb[icomp].Vendor) > 0 ) {
+									strcat(username,compdb[icomp].Vendor);
+								}
+							}
+						}
+					}
+            	} else {
+            		printf ( "ignoring badly formatted guest iter");
+            	}
+            }
+            //"datetime" : { "$date" : 1602127029476 }
+            if (strcmp(bson_iter_key (&iter),"datetime") == 0 ) {
+            	value = bson_iter_value (&iter);  // bson_iter_type
+            	//printf ("\tFound datetime value->value_type: %u\n",value->value_type);
+            	if (value->value_type == BSON_TYPE_DATE_TIME) {
+            		datetime = bson_iter_time_t (&iter);
+					if (dbgprnt) printf ("\tFound datetime value: \"%s\"\n", ctime(&datetime));
+					strcpy(timetag,ctime(&datetime));
+					int tlen = strlen(timetag) - 1;
+					if ( tlen > -1 ) timetag[tlen] = '\000';
+				} else {
+					printf ( "ignoring badly formatted datetime iter");
+				}
+            }
+
+         }
+		switch (keytype) {
+			case 1: // connect
+			case 5:
+				printf("%s %s connected to %s via %s\n",timetag,username,ssid,apname1);
+				break;
+
+			case 2: // disconnect
+			case 6:
+	        	 printf ( "%s %s disconnected from %s via %s after %li seconds\n",timetag,username,ssid,apname1,duration);
+				break;
+
+			case 3: // roam radio
+			case 7:
+	        	 printf ( "%s %s roamed radio, apname1=%s, apname2=%s, duration=%li, ssid=%s\n",timetag,username,apname1,apname2,duration,ssid);
+				break;
+
+			case 4: // roam
+			case 8:
+	        	 printf ( "%s %s on %s roamed from %s to %s\n",timetag,username,ssid,apname1,apname2);
+				break;
+
+			default:
+        	 printf ( " type %u, %s username=%s, usertype=%i, apname1=%s, apname2=%s, duration=%li, ssid=%s\n",keytype,timetag,username,usertype,apname1,apname2,duration,ssid);
          }
       } else {
    	   fprintf(stderr," bson_iter_init call failed \n");
@@ -1807,13 +2102,15 @@ int processUniFiEventData ()
 
    }
    if ( mongoc_cursor_error (cursor, &error) ) {
-	   fprintf(stderr," mongo cursor read routing returned error : \"%s\"\n",error.message);
+	   fprintf(stderr," mongo cursor read routine returned error : \"%s\"\n",error.message);
 	   return 3;
    }
 
 //   bson_destroy (query);
    bson_destroy (&query2);
    mongoc_cursor_destroy (cursor);
+   sleep(5);
+}
    mongoc_collection_destroy (collection);
    mongoc_client_destroy (client);
 //   mongoc_cleanup ();  // note : must be called only once - moved to end of main program
