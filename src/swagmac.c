@@ -124,7 +124,7 @@ static void _send(int sock, const char *buffer, size_t size);
 static void _event_handler(telnet_t *telnet, telnet_event_t *ev,void *user_data);
 int getswitchfile(char *hostname, char *portname);
 int processUniFiEventData (unsigned int UniFiMonitoreconds);
-int processUniFiUserData ();
+int processUniFiUserData (int fmtType);
 
 
 
@@ -645,84 +645,10 @@ int main(int argc, char* argv[])
 								(compdb+i)->Vendor = ttven;
 								numfound++;
 							}
-							if (fourth) {
-								filename = "leases.txt";
-								fp = fopen(filename, "r");
-						//10.0.0.11	DESKTOP-SDRAR14.SWAG.local	9/25/2020 4:53:37 PM	DHCP	d017c28ba606		Full Access	N/A	None
-								if (fp == NULL)return(1);
-								printf(" processing %s\n",filename);
-
-								fp2 = fopen("maclist4.txt", "w");
-								if (fp2 == NULL)return(2);
-
-						//		int colns[] = {5,1,0};
-								int colns[] = {4,1,0};
-						#define NLABS2 3
-								int nlabs = NLABS2;
-								char * cdata[NLABS2];
-								int numnew = 0;
-
-								for (i=0;i<nlabs;i++) cdata[i] = (char*)malloc(LINELEN);
-
-								linenum = 0;
-								while ((read = getline(&line, &len, fp)) != -1) {
-									//	        printf("Retrieved line of length %zu:\n", read);
-									line[read - 1] = '\000';
-									linenum++;
-									fprintf(fp2," line found : \"%s\"\n", line);
-						//			if (parsline3(line,nlabs,colns,cdata,(char *)"\t") != 0) continue;
-									if (parsline3(line,nlabs,colns,cdata,(char *)",") != 0) continue;
-									tmac[0] = '\000';
-									tname[0] = '\000';
-									tip[0] = '\000';
-									if (strlen(cdata[0]) > 0) strcpy(tmac,cdata[0]);
-									if (strlen(cdata[1]) > 0) strcpy(tname,cdata[1]);
-									if (strlen(cdata[2]) > 0) strcpy(tip,cdata[2]);
-						//			if(strlen(tmac)<17) {
-									if(strlen(tmac)<12) {
-										fprintf(fp2," error : mac address bad on line %i\n",linenum);
-										continue;
-									}
-									if (macstr2ll(tmac,&tmacll,&tmaskll,3)) {
-										fprintf(fp2," error : bad mac address format on line %i\n",linenum);
-										continue;
-									}
-									tipl = ipstr2l(tip);
-									ttname = (char*)malloc(strlen(tname)+4);
-									strcpy(ttname,tname);
-									compt.Name = ttname;
-									compt.MAC = tmacll;
-									compt.IP = tipl;
-									compt.PortNumber = -1;
-									if ((icomp = findmac(tmacll)) == -1 ) {
-										compdb[numcomps] = compt;
-										numcomps++;
-										numnew++;
-									} else {
-										if (strlen(tname) > 0) {
-											free((compdb+icomp)->Name);
-											(compdb+icomp)->Name = compt.Name;
-										} else {
-											free(ttname);
-										}
-										if (strlen(tip) > 0) (compdb+icomp)->IP = compt.IP;
-										fprintf(fp2," warning : MAC address duplicated. Dup with icomp = %i (\"%s\")\n",icomp,(compdb+icomp)->Name);
-							//				compdb[icomp] = compt;
-									}
-
-						//			if ( strlen(line) > 2 ) fprintf(fp2, "dsquery * %s -scope base -attr objectSid %s studentSIDs.txt\n", line, redir);
-						//			redir = redir2;
-								}
-								fclose(fp);
-								for (i=0;i<nlabs;i++) free(cdata[i]);
-								if (numcomps>0) {
-									for (i=0;i<numcomps;i++) {
-										printcomp(compdb+i,fp2);
-									}
-								}
-								printf(" %i new MACs found\n",numnew);
-								fclose(fp2);
-							}
+						}
+						if ( (compdb+i)->Vendor == NULL ) {
+							fprintf(stderr," null vendor while processing oui data, i = %i,numcomps = %i,numfound = %i\n",i,numcomps,numfound);
+							continue;
 						}
 						if ( strlen((compdb+i)->Vendor) == 0) {
 							free((compdb+i)->Vendor);
@@ -834,6 +760,8 @@ int main(int argc, char* argv[])
 		    case 9:
 		    if (ninth) {
 		    	printf(" processing UniFi Event data\n");
+		    	fp2 = fopen(outfilename, "w");
+		    	if (fp2 == NULL)return(2);
 		    	unsigned int UniFiMonitoreconds;
 		    	if ( fmtType > 0 ) {
 		    		UniFiMonitoreconds = fmtType / 5;
@@ -844,15 +772,19 @@ int main(int argc, char* argv[])
 		    	if ( processUniFiEventData (UniFiMonitoreconds) ){
 		    		fprintf(stderr," UniFi Event processing failed\n");
 		    	}
+		    	fclose(fp2);
 		    }
 	    	break;
 
 		    case 10:
 		    if (tenth) {
 		    	printf(" processing UniFi User data\n");
-		    	if ( processUniFiUserData () ){
+		    	fp2 = fopen(outfilename, "w");
+		    	if (fp2 == NULL)return(2);
+		    	if ( processUniFiUserData (fmtType) ){
 		    		fprintf(stderr," UniFi User processing failed\n");
 		    	}
+		    	fclose(fp2);
 		    }
 	    	break;
 
@@ -2264,7 +2196,7 @@ int processUniFiEventData (unsigned int UniFiMonitoreconds)
    return 0;
 }
 
-int processUniFiUserData ()
+int processUniFiUserData (int loaddb)
 {
 	mongoc_client_t *client;
 	mongoc_collection_t *collection;
@@ -2287,8 +2219,8 @@ int processUniFiUserData ()
 	char * tempstr;
 	char * newven;
 	char * newhost;
-	char * newfirstseen;
-	char * newlastseen;
+	char * newfirstseen = "";
+	char * newlastseen = "";
 	unsigned short int dbgprnt = 0;
 	time_t  datetime;
 	unsigned long long tmacll;
@@ -2434,27 +2366,31 @@ int processUniFiUserData ()
 			compt.Name = newhost;
 		}
 		if ( tmacll ) {
+		//	ica-2007	IntelCor	00:21:6b:eb:c1:2a	-	User	6.75 GB	309 MB	07/30/2020 6:12 pm	09/07/2020 10:15 am
+			fprintf (fp2,"\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n",hostname,oui,mac,"-","User","0.0 MB","0.0 MB",newfirstseen,newlastseen);
 			if (dbgprnt) printf ("\t\tFound mac value: \"%llx\"\n", tmacll);
 			if ( ( icomp = findmac(tmacll) ) > -1 ) {
 				if (dbgprnt>2) printf ("\t\tFound mac in database at %u\n", icomp);
 				if ( compdb[icomp].Name == NULL ){
-					compdb[icomp].Name = compt.Name;
+					if ( loaddb ) compdb[icomp].Name = compt.Name;
 					if (dbgprnt>2) printf ("\t\tcompt.Name in database changed to \"%s\"\n", compt.Name);
 				} else {
 					free(compt.Name);
 					compt.Name = NULL;
 				}
 				if ( compdb[icomp].Vendor == NULL ){
-					compdb[icomp].Vendor = compt.Vendor;
+					if ( loaddb ) compdb[icomp].Vendor = compt.Vendor;
 					if (dbgprnt>2) printf ("\t\tcompt.Vendor in database changed to \"%s\"\n", compt.Vendor);
 				} else {
 					free(compt.Vendor);
 					compt.Vendor = NULL;
 				}
 			} else {
-				compdb[numcomps] = compt;
-				numcomps++;
-				numnew++;
+				if ( loaddb ) {
+					compdb[numcomps] = compt;
+					numcomps++;
+					numnew++;
+				}
 				if (dbgprnt>2) {
 					printf("new comp added to database at %u \n",numcomps-1);
 					printcomp(&compdb[numcomps-1],stdout);
