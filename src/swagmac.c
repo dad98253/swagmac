@@ -1769,11 +1769,15 @@ int processUniFiEventData (unsigned int UniFiMonitoreconds)
    char apname2[LINELEN];
    char ssid[LINELEN];
    char timetag[LINELEN];
+   char ip[LINELEN];
+   char message[LINELEN];
    char * tempstr;
    unsigned short int dbgprnt = 0;
    time_t  datetime;
    unsigned long long tmacll;
    unsigned long long tmaskll;
+   char buff[70];
+   struct tm buf;
 
    fp2 = fopen("last-time.txt", "r");
    if (fp2 != NULL) {
@@ -1834,7 +1838,9 @@ int processUniFiEventData (unsigned int UniFiMonitoreconds)
 			apname1[0] = '\000';
 			apname2[0] = '\000';
 			timetag[0] = '\000';
+			ip[0] = '\000';
 			ssid[0] = '\000';
+			message[0] = '\000';
 			while (bson_iter_next (&iter)) {
 				if (dbgprnt>2) printf ("Found element key: \"%s\"\n", bson_iter_key (&iter));
 				if (strcmp(bson_iter_key (&iter),"key") == 0 ) {
@@ -1859,6 +1865,32 @@ int processUniFiEventData (unsigned int UniFiMonitoreconds)
 							keytype = 7;
 						} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_WG_Roam") == 0 ) {
 							keytype = 8;
+						} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_AP_PossibleInterference") == 0 ) {
+							keytype = 9;
+						} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_AD_Login") == 0 ) {
+							keytype = 10;
+						} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_AP_RestartedUnknown") == 0 ) {
+							keytype = 11;
+						} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_AP_ChannelChanged") == 0 ) {
+							keytype = 12;
+						} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_AP_Connected") == 0 ) {
+							keytype = 14;
+						} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_AP_AutoReadopted") == 0 ) {
+							keytype = 15;
+						} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_AP_Lost_Contact") == 0 ) {
+							keytype = 16;
+						} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_AP_DetectRogueAP") == 0 ) {
+							keytype = 17;
+						} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_AP_Upgraded") == 0 ) {
+							keytype = 18;
+						} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_AP_Deleted") == 0 ) {
+							keytype = 19;
+						} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_AP_DiscoveredPending") == 0 ) {
+							keytype = 20;
+						} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_AP_Adopted") == 0 ) {
+							keytype = 21;
+						} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_AD_BackupCreated") == 0 ) {
+							keytype = 22;
 						} else {
 							if (dbgprnt) printf ( "unwanted keytype %s found\n",bson_iter_utf8 (&iter,&strlength));
 						}
@@ -1980,12 +2012,28 @@ int processUniFiEventData (unsigned int UniFiMonitoreconds)
 						printf ( "ignoring badly formatted ssid iter");
 					}
 				}
+				if (strcmp(bson_iter_key (&iter),"essid") == 0 ) {
+					value = bson_iter_value (&iter);  // bson_iter_type
+					//printf ("\tFound msg value->value_type: %u\n",value->value_type);
+					if (value->value_type == BSON_TYPE_UTF8) {
+						tempstr = (char *)bson_iter_utf8 (&iter,&strlength);
+						if (dbgprnt) printf ("\tFound essid value: \"%s\"\n", tempstr);
+						if (dbgprnt) printf ("\tlength = %u\n",strlength);
+						strncpy(ssid,tempstr,strlength);
+						ssid[strlength] = '\000';
+					} else {
+						printf ( "ignoring badly formatted essid iter");
+					}
+				}
 				if (strcmp(bson_iter_key (&iter),"msg") == 0 ) {
 					value = bson_iter_value (&iter);  // bson_iter_type
 					//printf ("\tFound msg value->value_type: %u\n",value->value_type);
 					if (value->value_type == BSON_TYPE_UTF8) {
-						if (dbgprnt) printf ("\tFound msg value: \"%s\"\n", bson_iter_utf8 (&iter,&strlength));
+						tempstr = (char *)bson_iter_utf8 (&iter,&strlength);
+						if (dbgprnt) printf ("\tFound msg value: \"%s\"\n", tempstr);
 	//            		printf ("\tFound msg value: \"%s\"\n", bson_iter_utf8 (&iter,&strlength));
+						strncpy(message,tempstr,strlength);
+						message[strlength] = '\000';
 						if (dbgprnt) printf ("\tlength = %u\n",strlength);
 					} else {
 						printf ( "ignoring badly formatted msg iter");
@@ -2078,14 +2126,27 @@ int processUniFiEventData (unsigned int UniFiMonitoreconds)
 					if (value->value_type == BSON_TYPE_DATE_TIME) {
 						datetime = bson_iter_time_t (&iter);
 						if (dbgprnt) printf ("\tFound datetime value: \"%s\"\n", ctime(&datetime));
-						strcpy(timetag,ctime(&datetime));
-						int tlen = strlen(timetag) - 1;
-						if ( tlen > -1 ) timetag[tlen] = '\000';
+						strftime(buff, sizeof buff, "%b %e %X", localtime_r(&datetime, &buf));
+						strcpy(timetag,buff);
+//						int tlen = strlen(timetag) - 1;
+//						if ( tlen > -1 ) timetag[tlen] = '\000';
 					} else {
 						printf ( "ignoring badly formatted datetime iter");
 					}
 				}
-
+				if (strcmp(bson_iter_key (&iter),"ip") == 0 ) {
+					value = bson_iter_value (&iter);  // bson_iter_type
+					//printf ("\tFound msg value->value_type: %u\n",value->value_type);
+					if (value->value_type == BSON_TYPE_UTF8) {
+						tempstr = (char *)bson_iter_utf8 (&iter,&strlength);
+						if (dbgprnt) printf ("\tFound ip value: \"%s\"\n", tempstr);
+						if (dbgprnt) printf ("\tlength = %u\n",strlength);
+						strncpy(ip,tempstr,strlength);
+						ip[strlength] = '\000';
+					} else {
+						printf ( "ignoring badly formatted ip iter");
+					}
+				}
 			 }
 			switch (keytype) {
 				case 1: // connect
@@ -2108,8 +2169,67 @@ int processUniFiEventData (unsigned int UniFiMonitoreconds)
 					 printf ( "%s %s on %s roamed from %s to %s\n",timetag,username,ssid,apname1,apname2);
 					break;
 
+				case 9:
+					printf ( "%s %s was encountering some interference\n",timetag,apname1);
+					break;
+
+				case 10:
+					printf ( "%s Admin login from %s\n",timetag,ip);
+					break;
+
+				case 11:
+					printf ( "%s %s was restarted\n",timetag,apname1);
+					break;
+
+				case 12:
+					printf ( "%s %s changed channels\n",timetag,apname1);
+					break;
+
+				case 14:
+					printf ( "%s %s was connected\n",timetag,apname1);
+					break;
+
+				case 15:
+					printf ( "%s %s was automatically re-adopted\n",timetag,apname1);
+					break;
+
+				case 16:
+					printf ( "%s %s was disconnected\n",timetag,apname1);
+					break;
+
+				case 17:
+					printf ( "%s Rogue access point %s was detected by %s\n",timetag,ssid,apname1);
+					break;
+
+				case 18:
+					printf ( "%s %s firmware was upgraded\n",timetag,apname1);
+					break;
+
+				case 19:
+					printf ( "%s %s was deleted\n",timetag,apname1);
+					break;
+
+				case 20:
+					printf ( "%s %s was discovered and is awaiting adoption\n",timetag,apname1);
+					break;
+
+				case 21:
+					printf ( "%s %s was adopted\n",timetag,apname1);
+					break;
+
+				case 22:
+					printf ( "%s a backup was created\n",timetag);
+					break;
+
 				default:
-				 printf ( " type %u, %s username=%s, usertype=%i, apname1=%s, apname2=%s, duration=%li, ssid=%s\n",keytype,timetag,username,usertype,apname1,apname2,duration,ssid);
+				 printf ( " type %u, %s username=%s, usertype=%i, apname1=%s, apname2=%s, duration=%li, ssid=%s, msg=\"%s\"\n",keytype,timetag,username,usertype,apname1,apname2,duration,ssid,message);
+				 if ( ( str = bson_as_json (doc, NULL) ) == NULL ) {
+					   fprintf(stderr," bson_as_json call failed \n");
+				 } else {
+					   printf ("bson str = %s\n", str);
+					   bson_free (str);
+				 }
+
 			 }
 		  } else {
 		   fprintf(stderr," bson_iter_init call failed \n");
