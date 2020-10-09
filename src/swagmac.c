@@ -123,7 +123,7 @@ static void _input(char *buffer, int size);
 static void _send(int sock, const char *buffer, size_t size);
 static void _event_handler(telnet_t *telnet, telnet_event_t *ev,void *user_data);
 int getswitchfile(char *hostname, char *portname);
-int processUniFiEventData (unsigned int UniFiMonitoreconds);
+int processUniFiEventData (char * coloropt, unsigned int UniFiMonitoreconds);
 int processUniFiUserData (int fmtType);
 
 
@@ -769,7 +769,7 @@ int main(int argc, char* argv[])
 		    	} else {
 		    		UniFiMonitoreconds = 1;
 		    	}
-		    	if ( processUniFiEventData (UniFiMonitoreconds) ){
+		    	if ( processUniFiEventData (filename, UniFiMonitoreconds) ){
 		    		fprintf(stderr," UniFi Event processing failed\n");
 		    	}
 		    	fclose(fp2);
@@ -1677,7 +1677,7 @@ int getswitchfile(char *hostname, char *portname) {
 	return 0;
 }
 
-int processUniFiEventData (unsigned int UniFiMonitoreconds)
+int processUniFiEventData (char * coloropt, unsigned int UniFiMonitoreconds)
 {
    mongoc_client_t *client;
    mongoc_collection_t *collection;
@@ -1691,7 +1691,7 @@ int processUniFiEventData (unsigned int UniFiMonitoreconds)
    const bson_value_t *value;
    char *str;
    long int last_time = 0;
-   FILE *fp2;
+   FILE *fp3;
    uint32_t strlength;
    unsigned short int usertype = 0;
    unsigned short int keytype = 0;
@@ -1710,17 +1710,28 @@ int processUniFiEventData (unsigned int UniFiMonitoreconds)
    unsigned long long tmaskll;
    char buff[70];
    struct tm buf;
+   char *RED = "";
+   char *NORM = "";
+   char *GREEN = "";
+   char *YELLOW = "";
 
-   fp2 = fopen("last-time.txt", "r");
-   if (fp2 != NULL) {
-	   fscanf(fp2,"%li\n",&last_time);
-	   fclose(fp2);
+   if ( strcmp (coloropt,"color") == 0 ) {
+	   RED = "\33[1;31m";
+	   NORM = "\33[0m";
+	   //GREEN = "\33[1;33;4;45m";
+	   GREEN = "\33[1;35m";
+	   YELLOW = "\33[1;32m";
+   }
+
+   fp3 = fopen("last-time.txt", "r");
+   if (fp3 != NULL) {
+	   fscanf(fp3,"%li\n",&last_time);
+	   fclose(fp3);
    } else {
 	   printf("\t\t The Last Time file does not exist.\n");
 	   return(1);
    }
    printf("\t\t Last Time Value is %li\n",last_time);
-
 
    if ( !mongoInitCalled) {
 	   mongoc_init ();
@@ -2083,26 +2094,26 @@ int processUniFiEventData (unsigned int UniFiMonitoreconds)
 			switch (keytype) {
 				case 1: // connect
 				case 5:
-					printf("%s %s connected to %s via %s\n",timetag,username,ssid,apname1);
+					printf("%s %s%s%s connected to %s%s%s via %s%s%s\n",timetag,RED,username,NORM,YELLOW,ssid,NORM,GREEN,apname1,NORM);
 					break;
 
 				case 2: // disconnect
 				case 6:
-					 printf ( "%s %s disconnected from %s via %s after %li seconds\n",timetag,username,ssid,apname1,duration);
+					 printf ( "%s %s%s%s disconnected from %s%s%s via %s%s%s after %li seconds\n",timetag,RED,username,NORM,YELLOW,ssid,NORM,GREEN,apname1,NORM,duration);
 					break;
 
 				case 3: // roam radio
 				case 7:
-					 printf ( "%s %s roamed radio, apname1=%s, apname2=%s, duration=%li, ssid=%s\n",timetag,username,apname1,apname2,duration,ssid);
+					 printf ( "%s %s%s%s roamed radio, apname1=%s%s%s, apname2=%s%s%s, duration=%li, ssid=%s%s%s\n",timetag,RED,username,NORM,GREEN,apname1,NORM,GREEN,apname2,NORM,duration,YELLOW,ssid,NORM);
 					break;
 
 				case 4: // roam
 				case 8:
-					 printf ( "%s %s on %s roamed from %s to %s\n",timetag,username,ssid,apname1,apname2);
+					 printf ( "%s %s%s%s on %s%s%s roamed from %s%s%s to %s%s%s\n",timetag,RED,username,NORM,YELLOW,ssid,NORM,GREEN,apname1,NORM,GREEN,apname2,NORM);
 					break;
 
 				case 9:
-					printf ( "%s %s was encountering some interference\n",timetag,apname1);
+					printf ( "%s %s%s%s was encountering some interference\n",timetag,GREEN,apname1,NORM);
 					break;
 
 				case 10:
@@ -2110,43 +2121,43 @@ int processUniFiEventData (unsigned int UniFiMonitoreconds)
 					break;
 
 				case 11:
-					printf ( "%s %s was restarted\n",timetag,apname1);
+					printf ( "%s %s%s%s was restarted\n",timetag,GREEN,apname1,NORM);
 					break;
 
 				case 12:
-					printf ( "%s %s changed channels\n",timetag,apname1);
+					printf ( "%s %s%s%s changed channels\n",timetag,GREEN,apname1,NORM);
 					break;
 
 				case 14:
-					printf ( "%s %s was connected\n",timetag,apname1);
+					printf ( "%s %s%s%s was connected\n",timetag,GREEN,apname1,NORM);
 					break;
 
 				case 15:
-					printf ( "%s %s was automatically re-adopted\n",timetag,apname1);
+					printf ( "%s %s%s%s was automatically re-adopted\n",timetag,GREEN,apname1,NORM);
 					break;
 
 				case 16:
-					printf ( "%s %s was disconnected\n",timetag,apname1);
+					printf ( "%s %s%s%s was disconnected\n",timetag,GREEN,apname1,NORM);
 					break;
 
 				case 17:
-					printf ( "%s Rogue access point %s was detected by %s\n",timetag,ssid,apname1);
+					printf ( "%s Rogue access point %s%s%s was detected by %s%s%s\n",timetag,YELLOW,ssid,NORM,GREEN,apname1,NORM);
 					break;
 
 				case 18:
-					printf ( "%s %s firmware was upgraded\n",timetag,apname1);
+					printf ( "%s %s%s%s firmware was upgraded\n",timetag,GREEN,apname1,NORM);
 					break;
 
 				case 19:
-					printf ( "%s %s was deleted\n",timetag,apname1);
+					printf ( "%s %s%s%s was deleted\n",timetag,GREEN,apname1,NORM);
 					break;
 
 				case 20:
-					printf ( "%s %s was discovered and is awaiting adoption\n",timetag,apname1);
+					printf ( "%s %s%s%s was discovered and is awaiting adoption\n",timetag,GREEN,apname1,NORM);
 					break;
 
 				case 21:
-					printf ( "%s %s was adopted\n",timetag,apname1);
+					printf ( "%s %s%s%s was adopted\n",timetag,GREEN,apname1,NORM);
 					break;
 
 				case 22:
@@ -2184,10 +2195,10 @@ int processUniFiEventData (unsigned int UniFiMonitoreconds)
 //   mongoc_cleanup ();  // note : must be called only once - moved to end of main program
    if ( last_time) {
 	   printf("\t\t Last Time Value is %li\n",last_time);
-	   fp2 = fopen("last-time.txt", "w");
-	   if (fp2 == NULL)return(2);
-	   fprintf(fp2,"%li\n",last_time);
-	   fclose(fp2);
+	   fp3 = fopen("last-time.txt", "w");
+	   if (fp3 == NULL)return(2);
+	   fprintf(fp3,"%li\n",last_time);
+	   fclose(fp3);
 	   time_t temptime;
 	   temptime = ((time_t)last_time) / 1000;
 	   fprintf(stderr,"\t\t Last Time is %s",ctime((const time_t *)&temptime));
