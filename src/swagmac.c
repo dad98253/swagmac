@@ -123,7 +123,7 @@ static void _input(char *buffer, int size);
 static void _send(int sock, const char *buffer, size_t size);
 static void _event_handler(telnet_t *telnet, telnet_event_t *ev,void *user_data);
 int getswitchfile(char *hostname, char *portname);
-int processUniFiEventData (char * coloropt, unsigned int UniFiMonitoreconds);
+int processUniFiEventData (char * coloropt, int UniFiMonitoreconds);
 int processUniFiUserData (int fmtType);
 
 
@@ -762,12 +762,11 @@ int main(int argc, char* argv[])
 		    	printf(" processing UniFi Event data\n");
 		    	fp2 = fopen(outfilename, "w");
 		    	if (fp2 == NULL)return(2);
-		    	unsigned int UniFiMonitoreconds;
+		    	int UniFiMonitoreconds;
 		    	if ( fmtType > 0 ) {
-		    		UniFiMonitoreconds = fmtType / 5;
-		    		if ( UniFiMonitoreconds < 1) UniFiMonitoreconds = 1;
-		    	} else {
-		    		UniFiMonitoreconds = 1;
+		    		UniFiMonitoreconds = (fmtType / 5) + 1;
+		    	} else if ( fmtType < 0 ) {
+		    		UniFiMonitoreconds = (fmtType / 5) - 1;
 		    	}
 		    	if ( processUniFiEventData (filename, UniFiMonitoreconds) ){
 		    		fprintf(stderr," UniFi Event processing failed\n");
@@ -1677,7 +1676,7 @@ int getswitchfile(char *hostname, char *portname) {
 	return 0;
 }
 
-int processUniFiEventData (char * coloropt, unsigned int UniFiMonitoreconds)
+int processUniFiEventData (char * coloropt, int UniFiMonitoreconds)
 {
    mongoc_client_t *client;
    mongoc_collection_t *collection;
@@ -1714,6 +1713,7 @@ int processUniFiEventData (char * coloropt, unsigned int UniFiMonitoreconds)
    char *NORM = "";
    char *GREEN = "";
    char *YELLOW = "";
+   int interactiive = 1;
 
    if ( strcmp (coloropt,"color") == 0 ) {
 	   RED = "\33[1;31m";
@@ -1721,6 +1721,11 @@ int processUniFiEventData (char * coloropt, unsigned int UniFiMonitoreconds)
 	   //GREEN = "\33[1;33;4;45m";
 	   GREEN = "\33[1;35m";
 	   YELLOW = "\33[1;32m";
+   }
+
+   if ( UniFiMonitoreconds < 0 ) {
+	   interactiive = 0;
+	   UniFiMonitoreconds = -UniFiMonitoreconds;
    }
 
    fp3 = fopen("last-time.txt", "r");
@@ -1834,6 +1839,8 @@ int processUniFiEventData (char * coloropt, unsigned int UniFiMonitoreconds)
 							keytype = 21;
 						} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_AD_BackupCreated") == 0 ) {
 							keytype = 22;
+						} else if ( strcmp(bson_iter_utf8 (&iter,&strlength),"EVT_AP_Restarted") == 0 ) {
+							keytype = 23;
 						} else {
 							if (dbgprnt) printf ( "unwanted keytype %s found\n",bson_iter_utf8 (&iter,&strlength));
 						}
@@ -2094,74 +2101,96 @@ int processUniFiEventData (char * coloropt, unsigned int UniFiMonitoreconds)
 			switch (keytype) {
 				case 1: // connect
 				case 5:
-					printf("%s %s%s%s connected to %s%s%s via %s%s%s\n",timetag,RED,username,NORM,YELLOW,ssid,NORM,GREEN,apname1,NORM);
+					if ( interactiive ) printf("%s %s%s%s connected to %s%s%s via %s%s%s\n",timetag,RED,username,NORM,YELLOW,ssid,NORM,GREEN,apname1,NORM);
+					fprintf(fp2,"%s %s%s%s connected to %s%s%s via %s%s%s\n",timetag,RED,username,NORM,YELLOW,ssid,NORM,GREEN,apname1,NORM);
 					break;
 
 				case 2: // disconnect
 				case 6:
-					 printf ( "%s %s%s%s disconnected from %s%s%s via %s%s%s after %li seconds\n",timetag,RED,username,NORM,YELLOW,ssid,NORM,GREEN,apname1,NORM,duration);
+					if ( interactiive ) printf ( "%s %s%s%s disconnected from %s%s%s via %s%s%s after %li seconds\n",timetag,RED,username,NORM,YELLOW,ssid,NORM,GREEN,apname1,NORM,duration);
+					 fprintf(fp2, "%s %s%s%s disconnected from %s%s%s via %s%s%s after %li seconds\n",timetag,RED,username,NORM,YELLOW,ssid,NORM,GREEN,apname1,NORM,duration);
 					break;
 
 				case 3: // roam radio
 				case 7:
-					 printf ( "%s %s%s%s roamed radio, apname1=%s%s%s, apname2=%s%s%s, duration=%li, ssid=%s%s%s\n",timetag,RED,username,NORM,GREEN,apname1,NORM,GREEN,apname2,NORM,duration,YELLOW,ssid,NORM);
+					if ( interactiive ) printf ( "%s %s%s%s roamed radio, apname1=%s%s%s, apname2=%s%s%s, duration=%li, ssid=%s%s%s\n",timetag,RED,username,NORM,GREEN,apname1,NORM,GREEN,apname2,NORM,duration,YELLOW,ssid,NORM);
+					 fprintf(fp2, "%s %s%s%s roamed radio, apname1=%s%s%s, apname2=%s%s%s, duration=%li, ssid=%s%s%s\n",timetag,RED,username,NORM,GREEN,apname1,NORM,GREEN,apname2,NORM,duration,YELLOW,ssid,NORM);
 					break;
 
 				case 4: // roam
 				case 8:
-					 printf ( "%s %s%s%s on %s%s%s roamed from %s%s%s to %s%s%s\n",timetag,RED,username,NORM,YELLOW,ssid,NORM,GREEN,apname1,NORM,GREEN,apname2,NORM);
+					if ( interactiive ) printf ( "%s %s%s%s on %s%s%s roamed from %s%s%s to %s%s%s\n",timetag,RED,username,NORM,YELLOW,ssid,NORM,GREEN,apname1,NORM,GREEN,apname2,NORM);
+					 fprintf(fp2, "%s %s%s%s on %s%s%s roamed from %s%s%s to %s%s%s\n",timetag,RED,username,NORM,YELLOW,ssid,NORM,GREEN,apname1,NORM,GREEN,apname2,NORM);
 					break;
 
 				case 9:
-					printf ( "%s %s%s%s was encountering some interference\n",timetag,GREEN,apname1,NORM);
+					if ( interactiive ) printf ( "%s %s%s%s is encountering some interference\n",timetag,GREEN,apname1,NORM);
+					fprintf(fp2, "%s %s%s%s was encountering some interference\n",timetag,GREEN,apname1,NORM);
 					break;
 
 				case 10:
-					printf ( "%s Admin login from %s\n",timetag,ip);
+					if ( interactiive ) printf ( "%s Admin login from %s\n",timetag,ip);
+					fprintf(fp2, "%s Admin login from %s\n",timetag,ip);
 					break;
 
 				case 11:
-					printf ( "%s %s%s%s was restarted\n",timetag,GREEN,apname1,NORM);
+					if ( interactiive ) printf ( "%s %s%s%s was restarted\n",timetag,GREEN,apname1,NORM);
+					fprintf(fp2, "%s %s%s%s was restarted\n",timetag,GREEN,apname1,NORM);
 					break;
 
 				case 12:
-					printf ( "%s %s%s%s changed channels\n",timetag,GREEN,apname1,NORM);
+					if ( interactiive ) printf ( "%s %s%s%s changed channels\n",timetag,GREEN,apname1,NORM);
+					fprintf(fp2, "%s %s%s%s changed channels\n",timetag,GREEN,apname1,NORM);
 					break;
 
 				case 14:
-					printf ( "%s %s%s%s was connected\n",timetag,GREEN,apname1,NORM);
+					if ( interactiive ) printf ( "%s %s%s%s was connected\n",timetag,GREEN,apname1,NORM);
+					fprintf(fp2, "%s %s%s%s was connected\n",timetag,GREEN,apname1,NORM);
 					break;
 
 				case 15:
-					printf ( "%s %s%s%s was automatically re-adopted\n",timetag,GREEN,apname1,NORM);
+					if ( interactiive ) printf ( "%s %s%s%s was automatically re-adopted\n",timetag,GREEN,apname1,NORM);
+					fprintf(fp2, "%s %s%s%s was automatically re-adopted\n",timetag,GREEN,apname1,NORM);
 					break;
 
 				case 16:
-					printf ( "%s %s%s%s was disconnected\n",timetag,GREEN,apname1,NORM);
+					if ( interactiive ) printf ( "%s %s%s%s was disconnected\n",timetag,GREEN,apname1,NORM);
+					fprintf(fp2, "%s %s%s%s was disconnected\n",timetag,GREEN,apname1,NORM);
 					break;
 
 				case 17:
-					printf ( "%s Rogue access point %s%s%s was detected by %s%s%s\n",timetag,YELLOW,ssid,NORM,GREEN,apname1,NORM);
+					if ( interactiive ) printf ( "%s Rogue access point %s%s%s was detected by %s%s%s\n",timetag,YELLOW,ssid,NORM,GREEN,apname1,NORM);
+					fprintf(fp2, "%s Rogue access point %s%s%s was detected by %s%s%s\n",timetag,YELLOW,ssid,NORM,GREEN,apname1,NORM);
 					break;
 
 				case 18:
-					printf ( "%s %s%s%s firmware was upgraded\n",timetag,GREEN,apname1,NORM);
+					if ( interactiive ) printf ( "%s %s%s%s firmware was upgraded\n",timetag,GREEN,apname1,NORM);
+					fprintf(fp2, "%s %s%s%s firmware was upgraded\n",timetag,GREEN,apname1,NORM);
 					break;
 
 				case 19:
-					printf ( "%s %s%s%s was deleted\n",timetag,GREEN,apname1,NORM);
+					if ( interactiive ) printf ( "%s %s%s%s was deleted\n",timetag,GREEN,apname1,NORM);
+					fprintf(fp2, "%s %s%s%s was deleted\n",timetag,GREEN,apname1,NORM);
 					break;
 
 				case 20:
-					printf ( "%s %s%s%s was discovered and is awaiting adoption\n",timetag,GREEN,apname1,NORM);
+					if ( interactiive ) printf ( "%s %s%s%s was discovered and is awaiting adoption\n",timetag,GREEN,apname1,NORM);
+					fprintf(fp2, "%s %s%s%s was discovered and is awaiting adoption\n",timetag,GREEN,apname1,NORM);
 					break;
 
 				case 21:
-					printf ( "%s %s%s%s was adopted\n",timetag,GREEN,apname1,NORM);
+					if ( interactiive ) printf ( "%s %s%s%s was adopted\n",timetag,GREEN,apname1,NORM);
+					fprintf(fp2, "%s %s%s%s was adopted\n",timetag,GREEN,apname1,NORM);
 					break;
 
 				case 22:
-					printf ( "%s a backup was created\n",timetag);
+					if ( interactiive ) printf ( "%s a backup was created\n",timetag);
+					fprintf(fp2, "%s a backup was created\n",timetag);
+					break;
+
+				case 23:
+					if ( interactiive ) printf ( "%s %s%s%s was restarted by Admin\n",timetag,GREEN,apname1,NORM);
+					fprintf(fp2, "%s %s%s%s was restarted by Admin\n",timetag,GREEN,apname1,NORM);
 					break;
 
 				default:
