@@ -40,8 +40,6 @@ AM_CONDITIONAL([LINUX], [test "$build_linux" = "yes"])
 AM_CONDITIONAL([WINDOWS], [test "$build_windows" = "yes"])
 AM_CONDITIONAL([FREEBSD], [test "$build_freebsd" = "yes"])
 
-#AM_GNU_GETTEXT([external])
-#AM_GNU_GETTEXT_VERSION(0.17)
 # see GNU autoconf archive = perdefined macros
 if test "$build_linux" = "yes"; then
 AX_GENERATE_CHANGELOG
@@ -70,21 +68,16 @@ AC_DEFINE_UNQUOTED(SWAGMAC_VERSION_1, $swagmac_version_1, [ SWAGMAC version leve
 AC_DEFINE_UNQUOTED(SWAGMAC_VERSION_2, $swagmac_version_2, [ SWAGMAC version level 2. ])
 AC_DEFINE_UNQUOTED(SWAGMAC_VERSION_3, $swagmac_version_3, [ SWAGMAC version level 3. ])
 AC_SUBST(SWAGMAC_VERSION, $swagmac_version)
-# Perhaps check for: (more) programs, libraries, header files, types,
-# structures, compiler characteristics, library functions, system services.
 
 # Checks for libraries.
-# FIXME: Replace `main' with a function in `-lgmp':
 AC_CHECK_LIB([xml2], [xmlFreeDoc])
-
 AC_CHECK_LIB([telnet], [telnet_init])
 AC_CHECK_LIB([mongoc-1.0], [mongoc_init])
 AC_CHECK_LIB([bson-1.0], [bson_init])
 
-
 # Checks for header files.
 AC_CHECK_HEADERS([malloc.h ctype.h termios.h sys/socket.h arpa/inet.h netinet/in.h arpa/inet.h netdb.h poll.h errno.h /usr/include/libxml2/libxml/xmlmemory.h /usr/include/libxml2/libxml/parser.h libtelnet.h /usr/include/libbson-1.0/bson.h /usr/include/libmongoc-1.0/mongoc.h termios.h ])
-#AC_CHECK_HEADERS([zlib.h])
+
 # Checks for typedefs, structures, macros, and compiler characteristics.
 AC_CHECK_HEADER_STDBOOL
 AC_C_INLINE
@@ -106,7 +99,6 @@ AC_CHECK_TYPES([ptrdiff_t])
 # Checks for compiler characteristics.
 AC_C_CONST
 AC_C_INLINE
-
 AC_DEFINE(_GNU_SOURCE, 1, [ Define to enable GNU extensions in glibc ])
 AC_HEADER_STDC
 
@@ -138,10 +130,6 @@ else
   CXXFLAGS="-O2"
 fi
 
-
-# check the swagmac compile defines
-
-
 AC_ARG_ENABLE(windoze,
   AC_HELP_STRING(
     [--enable-windoze],
@@ -161,11 +149,6 @@ AC_SYS_LARGEFILE
 AM_PROG_AR
 LT_INIT([disable-shared])
 AC_SUBST([LIBTOOL_DEPS])
-
-
-# Checks for typedefs, structures, and compiler characteristics.
-AC_C_INLINE
-AC_TYPE_SIZE_T
 
 
 # Output files
