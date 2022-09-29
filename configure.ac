@@ -76,7 +76,9 @@ AC_CHECK_LIB([mongoc-1.0], [mongoc_init])
 AC_CHECK_LIB([bson-1.0], [bson_init])
 
 # Checks for header files.
-AC_CHECK_HEADERS([malloc.h ctype.h termios.h sys/socket.h arpa/inet.h netinet/in.h arpa/inet.h netdb.h poll.h errno.h /usr/include/libxml2/libxml/xmlmemory.h /usr/include/libxml2/libxml/parser.h libtelnet.h /usr/include/libbson-1.0/bson.h /usr/include/libmongoc-1.0/mongoc.h termios.h ])
+AC_INCLUDES_DEFAULT
+AC_CHECK_HEADERS([malloc.h ctype.h termios.h sys/socket.h arpa/inet.h netinet/in.h arpa/inet.h netdb.h poll.h errno.h termios.h libtelnet.h])
+AC_CHECK_HEADERS([libxml2/libxml/xmlmemory.h libxml2/libxml/parser.h libbson-1.0/bson.h libmongoc-1.0/mongoc.h])
 
 # Checks for typedefs, structures, macros, and compiler characteristics.
 AC_CHECK_HEADER_STDBOOL
